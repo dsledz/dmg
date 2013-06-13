@@ -30,19 +30,20 @@
 #include "cpu.h"
 #include "graphics.h"
 
-#include "roms/tetris.h"
-#include "roms/drmario.h"
-#include "roms/cpu_instrs.h"
-
 using namespace DMG;
 
+/**
+ * Wrap the CPU, graphics, and keyboard handling in a simple runner.
+ */
 class Emulator {
     public:
         Emulator(void) { }
         ~Emulator(void) { }
 
         void load(const char *rom) {
-            _cpu.load_rom(std::string(rom));
+            const std::string name(rom);
+            std::cout << "Loading: " << name << std::endl;
+            _cpu.load_rom(name);
         }
 
         void run(SDL_Surface *window) {
@@ -52,7 +53,7 @@ class Emulator {
             SDL_FreeSurface(gb);
 
             RenderCallable render(window);
-            _cpu.reset(false);
+            _cpu.reset();
             _cpu.set_render(&render);
 
             while (!_stop) {
@@ -63,17 +64,17 @@ class Emulator {
                 for (unsigned i = 0; i < 5000; i++)
                     _cpu.step();
             }
+            _cpu.set_render(NULL);
         }
 
         void OnEvent(SDL_Event *event) {
-            bool set = true;
             switch (event->type) {
             case SDL_QUIT:
                 _stop = true;
                 break;
             case SDL_KEYUP:
-                set = false;
-            case SDL_KEYDOWN:
+            case SDL_KEYDOWN: {
+                bool set = (event->type == SDL_KEYDOWN);
                 // Gameboy keys
                 switch (event->key.keysym.sym) {
                 case SDLK_a: _cpu.set_key(GBKey::A, set); break;
@@ -87,19 +88,11 @@ class Emulator {
                 default:
                     break;
                 }
+                // Control keys
                 if (set) {
-                    // Control keys
                     switch (event->key.keysym.sym) {
                     case SDLK_q:
                         _stop = true;
-                        break;
-                    case SDLK_1:
-                        _cpu.load_rom(tetris_rom, sizeof(tetris_rom));
-                        _cpu.reset(false);
-                        break;
-                    case SDLK_2:
-                        _cpu.load_rom(drmario_rom, sizeof(drmario_rom));
-                        _cpu.reset(false);
                         break;
                     case SDLK_F2:
                         _cpu.dump();
@@ -112,6 +105,7 @@ class Emulator {
                     }
                 }
                 break;
+            }
             default:
                 break;
             }
@@ -122,19 +116,38 @@ class Emulator {
         bool _stop;
 };
 
+static void myexit(int ret)
+{
+    SDL_Quit();
+    exit(ret);
+}
+
+static void usage(const std::string &app)
+{
+    std::cout << app << " <rom>" << std::endl;
+    myexit(0);
+}
+
 extern "C" int main(int argc, char **argv)
 {
     if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
         return 1;
 
     SDL_Surface *window = SDL_SetVideoMode(
-        640, 512, 32, SDL_HWSURFACE | SDL_DOUBLEBUF);
+        292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF);
     if (window == NULL)
-        return 1;
+        myexit(1);
 
     Emulator emu;
-    if (argc > 1)
+    if (argc < 2)
+        usage(argv[1]);
+
+    try {
         emu.load(argv[1]);
+    } catch (DMG::RomException &e) {
+        std::cout << "Unable to read rom: " << e.rom << std::endl;
+        myexit(1);
+    }
 
     try {
         emu.run(window);

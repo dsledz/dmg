@@ -32,25 +32,26 @@
 #include <fstream>
 #include <iomanip>
 #include <type_traits>
-
-#include "roms/cpu_instrs.h"
-#include "roms/dmg.h"
-
-#define CURRENT_ROM cpu_instrs_rom
+#include <vector>
+#include <algorithm>
 
 using namespace DMG;
 
-Cpu::Cpu(void): _A(0), _F(0), _B(0), _C(0), _D(0), _E(0), _H(0), _L(0),
-     _SP(0), _PC(0), _rom(NULL), _debug(false)
+#define DEFAULT_ROM (32*1024)
+#define MEM_SIZE (64*1024)
+
+Cpu::Cpu(void): _AF(0), _BC(0), _DE(0), _HL(0), _SP(0), _PC(0),
+    _ime(IME::Disabled), _state(State::Running),
+    _cycles(0), _fcycles(0), _dcycles(0), _tcycles(0),
+    _render(NULL), _keys(0),
+    _debug(false)
 {
-    memset(_mem, 0, sizeof(_mem));
+    _mem.resize(MEM_SIZE);
+    _rom.resize(0);
 }
 
 Cpu::~Cpu(void)
 {
-    if (_rom != NULL)
-        delete[] _rom;
-    _rom = NULL;
 }
 
 #ifdef EQUAL_FAST
@@ -86,7 +87,7 @@ bool Cpu::operator == (const Cpu &rhs) const
     EQ(_PC, rhs._PC);
     EQ(_flags.Z, rhs._flags.Z);
     EQ(_flags.C, rhs._flags.C);
-    for (unsigned i = 0; i < sizeof(_mem); i++)
+    for (unsigned i = 0; i < _mem.size(); i++)
         if (_mem[i] != rhs._mem[i]) {
             std::cout << "Memory differences at: " << Print(i) << std::endl;
             EQ(_mem[i], rhs._mem[i]);
@@ -524,6 +525,11 @@ void Cpu::_stop()
 
 void Cpu::dump(void)
 {
+    std::cout << "Cartridge Header" << std::endl;
+    std::cout << "Name: " << _name << std::endl;
+    std::cout << "MBC: " << Print(_type) << std::endl;
+    std::cout << "Rom Size: " << Print(_rom_size) << std::endl;
+
     to_string(std::cout);
 }
 
@@ -1130,7 +1136,7 @@ void Cpu::_write(addr_t addr, reg_t value)
             break;
         case CtrlReg::DMG_RESET:
             // Nuke the DMG ROM
-            memcpy(&_mem[0], _rom, 256);
+            memcpy(&_mem[0], &_rom[0], 256);
             break;
         case CtrlReg::DMA:
             // Start the DMA transfer
@@ -1166,7 +1172,7 @@ void Cpu::_write(addr_t addr, reg_t value)
         unsigned rom_addr = value * 0x4000;
         if (_debug)
             std::cout << " loading " << Print(rom_addr);
-        if (rom_addr < _rom_len)
+        if (rom_addr < _rom.size())
             memcpy(&_mem[0x4000], &_rom[rom_addr], 0x4000);
         return;
     } else {
@@ -1183,15 +1189,8 @@ void Cpu::_write(addr_t addr, reg_t value)
  *|_|   |_|  \___/ \__, |_|  \__,_|_| |_| |_|
  *                 |___/
  */
-reg_t default_stack[256] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x80, 0xBF, 0xF3, 0x00, 0xBF, 0x00, 0x3F, 0x00, 0x00, 0xBF, 0x7F, 0xFF, 0x9F, 0x00, 0xBF, 0x00,
-    0xFF, 0x00, 0x00, 0x00, 0x77, 0xF3, 0xF1, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x91, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFC, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    /* rest is zero */
-};
-void Cpu::reset(bool logo)
+
+void Cpu::reset(void)
 {
     _A = 0x01;
     _F = 0xB0;
@@ -1204,18 +1203,53 @@ void Cpu::reset(bool logo)
     _SP = 0xFFFE;
     _PC = 0x0000;
 
-    memset(_mem, 0, sizeof(_mem));
+    memset(&_mem[0], 0, _mem.size());
+    _mem[CtrlReg::TIMA] = 0x00;
+    _mem[CtrlReg::TMA]  = 0x00;
+    _mem[CtrlReg::TAC]  = 0x00;
+    _mem[CtrlReg::NR10] = 0x80;
+    _mem[CtrlReg::NR11] = 0xBF;
+    _mem[CtrlReg::NR12] = 0xF3;
+    _mem[CtrlReg::NR14] = 0xBF;
+    _mem[CtrlReg::NR21] = 0x3F;
+    _mem[CtrlReg::NR22] = 0x00;
+    _mem[CtrlReg::NR24] = 0xBF;
+    _mem[CtrlReg::NR30] = 0x7F;
+    _mem[CtrlReg::NR31] = 0xFF;
+    _mem[CtrlReg::NR32] = 0x9F;
+    _mem[CtrlReg::NR33] = 0xBF;
+    _mem[CtrlReg::NR41] = 0xFF;
+    _mem[CtrlReg::NR42] = 0x00;
+    _mem[CtrlReg::NR43] = 0x00;
+    _mem[CtrlReg::NR44] = 0xBF;
+    _mem[CtrlReg::NR50] = 0x77;
+    _mem[CtrlReg::NR51] = 0xF3;
+    _mem[CtrlReg::NR52] = 0xF1;
+    _mem[CtrlReg::LCDC] = 0x91;
+    _mem[CtrlReg::SCY]  = 0x00;
+    _mem[CtrlReg::SCX]  = 0x00;
+    _mem[CtrlReg::LYC]  = 0x00;
+    _mem[CtrlReg::BGP]  = 0xFC;
+    _mem[CtrlReg::OBP0] = 0xFF;
+    _mem[CtrlReg::OBP1] = 0xFF;
+    _mem[CtrlReg::WY]   = 0x00;
+    _mem[CtrlReg::WX]   = 0x00;
+    _mem[CtrlReg::IF]   = 0x00;
+    _mem[CtrlReg::IE]   = 0x00;
 
-    memcpy(&_mem[0xFF00], default_stack, sizeof(default_stack));
+    if (_rom.size() != 0) {
+        // std::max(32*1024, _rom.size())
+        memcpy(&_mem[0x0000], &_rom[0], DEFAULT_ROM);
+    }
 
-    if (_rom == NULL)
-        load_rom(CURRENT_ROM, sizeof(CURRENT_ROM));
-    memcpy(&_mem[0x0000], _rom, 32*1024);
-
-    if (logo)
-        memcpy(&_mem[0x0000], dmg_rom, sizeof(dmg_rom));
-    else
+    // Load the boot rom (if it exists)
+    try {
+        bvec boot;
+        _read_rom("boot_dmg.gb", boot);
+        memcpy(&_mem[0x0000], &boot[0], boot.size());
+    } catch (RomException &e) {
         _PC = 0x0100;
+    }
 
     // Cartridge Header
     _name.clear();
@@ -1228,35 +1262,22 @@ void Cpu::reset(bool logo)
     _type = static_cast<Cartridge>(_mem[0x0147]);
     _rom_size = static_cast<RomSize>(_mem[0x0148]);
     _ram_size = static_cast<RamSize>(_mem[0x0149]);
-
-    std::cout << "Cartridge Header" << std::endl;
-    std::cout << "Name: " << _name << std::endl;
-    std::cout << "MBC: " << Print(_type) << std::endl;
-    std::cout << "Rom Size: " << Print(_rom_size) << std::endl;
-}
-
-void Cpu::load_rom(const reg_t *rom, unsigned len)
-{
-    if (_rom != NULL)
-        delete[] _rom;
-    _rom = new reg_t[len];
-    _rom_len = len;
-    memcpy(_rom, rom, _rom_len);
 }
 
 void Cpu::load_rom(const std::string &name)
 {
-    std::cout << "Loading: " << name << std::endl;
+    _read_rom(name, _rom);
+}
+
+void Cpu::_read_rom(const std::string &name, bvec &rom)
+{
     struct stat sb;
     if (stat(name.c_str(), &sb) == -1)
         throw RomException(name);
-    _rom_len = sb.st_size;
-    if (_rom != NULL)
-        delete[] _rom;
-    _rom = new reg_t[_rom_len];
+    rom.resize(sb.st_size);
     try {
         std::ifstream file(name, std::ios::in | std::ios::binary);
-        file.read((char *)_rom, _rom_len);
+        file.read((char *)&rom[0], rom.size());
     } catch (std::ifstream::failure e) {
         throw RomException(name);
     }
@@ -1327,7 +1348,7 @@ void Cpu::async_render(void)
     if (_render == NULL)
         return;
 
-    (*_render)(_mem);
+    (*_render)(&_mem[0]);
 }
 
 static inline void empty()

@@ -1,9 +1,9 @@
-# Sample Makefile
+# Sample Makefile for OS X
 
 CC= clang++
 GTEST_DIR= gtest-1.6.0
 SDL_DIR= ../SDL
-CPPFLAGS=  -I${GTEST_DIR}/include -g -Wall -Werror -std=c++11 -stdlib=libc++ -DGTEST_USE_OWN_TR1_TUPLE=1 -I${SDL_DIR}/include ${CFLAGS}
+CPPFLAGS=  -I${GTEST_DIR}/include -g -Wall -Werror -std=c++11 -stdlib=libc++ -DGTEST_USE_OWN_TR1_TUPLE=1 -I${SDL_DIR}/include ${CFLAGS} ${FLAGS}
 GTEST_LIB= libgtest.a
 SDL_LIBS= -L${SDL_DIR}/lib -lSDLmain -lSDL -framework OpenGL -framework Cocoa
 
@@ -30,7 +30,7 @@ check: ${GTEST_LIB} ${CPU_OBJS} ${CHECK_SRC}
 	${CC} ${CPPFLAGS} -I${GTEST_DIR} -c ${GTEST_DIR}/src/gtest_main.cc
 	${CC} ${CPPFLAGS} ${GTEST_LIB} ${CHECK_SRC} ${CPU_OBJS} gtest_main.o -o check
 
-dmg: ${CPU_OBJS} main.o
+dmg: ${CPU_OBJS} ${DMG_OBJS}
 	${CC} ${CPPFLAGS} ${SDL_LIBS} ${CPU_OBJS} ${DMG_OBJS} -o dmg
 
 clean:

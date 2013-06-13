@@ -28,12 +28,14 @@
 #include <iostream>
 #include <iomanip>
 #include <type_traits>
+#include <vector>
 
 typedef unsigned char reg_t;
 typedef char sreg_t;
 typedef unsigned short addr_t;
 typedef unsigned short wreg_t;
 typedef unsigned char byte_t;
+typedef std::vector<byte_t> bvec;
 
 namespace DMG {
 
@@ -174,6 +176,25 @@ enum CtrlReg {
     TIMA = 0xFF05,
     TMA  = 0xFF06,
     TAC  = 0xFF07,
+    NR10 = 0xFF10,
+    NR11 = 0xFF11,
+    NR12 = 0xFF12,
+    NR13 = 0xFF13,
+    NR14 = 0xFF14,
+    NR21 = 0xFF16,
+    NR22 = 0xFF17,
+    NR24 = 0xFF19,
+    NR30 = 0xFF1A,
+    NR31 = 0xFF1B,
+    NR32 = 0xFF1C,
+    NR33 = 0xFF1E,
+    NR41 = 0xFF20,
+    NR42 = 0xFF21,
+    NR43 = 0xFF22,
+    NR44 = 0xFF23,
+    NR50 = 0xFF24,
+    NR51 = 0xFF25,
+    NR52 = 0xFF26,
     LCDC = 0xFF40,
     STAT = 0xFF41,
     SCY  = 0xFF42,
@@ -238,8 +259,8 @@ private:
 
 class RomException: protected EmuException {
 public:
-    RomException(const std::string &name): _name(name) {};
-    std::string _name;
+    RomException(const std::string &name): rom(name) {};
+    std::string rom;
 };
 
 class Address {
@@ -298,7 +319,7 @@ public:
     void toggle_debug(void) { _debug = !_debug; };
 
     // DMG execution
-    void reset(bool logo=true);
+    void reset(void);
     void step(void);
 
     // Exposed for testing only
@@ -317,7 +338,6 @@ public:
     unsigned cycles(void) { return _cycles; };
 
     void load_rom(const std::string &name);
-    void load_rom(const reg_t *data, unsigned len);
     void set_render(Callable *render) { _render = render; };
     void set_key(GBKey key, bool set);
     void dump(void);
@@ -386,6 +406,8 @@ protected:
     void _pop(reg_t &high, reg_t &low);
     void _push(wreg_t reg);
     void _pop(wreg_t &reg);
+
+    void _read_rom(const std::string &name, bvec &rom);
 
     reg_t to_reg(Register reg);
 
@@ -500,8 +522,7 @@ private:
         _tcycles += cycles;
     }
 
-    reg_t *_rom;
-    unsigned _rom_len;
+    bvec _rom;
 
     Callable *_render;
     reg_t _keys;
@@ -514,7 +535,7 @@ private:
     RamSize _ram_size;
     std::string _name;
 
-    unsigned char _mem[64*1024];
+    bvec _mem;
 
     // Async rendering
     void async_render(void);

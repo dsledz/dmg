@@ -238,7 +238,6 @@ TEST(DMGOpcodes, ld_a_de)
 
     Cpu expect = cpu;
     expect.set(Register::A, 0xCC);
-    expect.set(CtrlReg::STAT, 0x10);
 
     cpu.test_step(1);
     EXPECT_EQ(expect, cpu);
@@ -257,7 +256,6 @@ TEST(DMGOpcodes, popAF)
     expect.set(Register::AF, 0x1200);
     expect.set(0xff8f, 0x12);
     expect.set(0xff8e, 0x00);
-    expect.set(CtrlReg::STAT, 0x10);
 
     cpu.test_step(2);
     EXPECT_EQ(expect, cpu);
@@ -282,7 +280,6 @@ TEST(DMGOpcodes, push)
     expect.set(Register::F, 0xC0);
     expect.set(0xff8f, 0x13);
     expect.set(0xff8e, 0x00);
-    expect.set(CtrlReg::STAT, 0x11);
 
     cpu.test_step(7);
     EXPECT_EQ(expect, cpu);
@@ -301,7 +298,6 @@ TEST(DMGOpcodes, daa)
 
     expect.set(Register::A, 0x10);
     expect.set(Register::F, 0x30);
-    expect.set(CtrlReg::STAT, 0x11);
 
     cpu.test_step(2);
     EXPECT_EQ(expect, cpu);
@@ -316,7 +312,6 @@ TEST(DMGOpcodes, cpl)
     Cpu expect = cpu;
     expect.set(Register::A, 0x55);
     expect.set(Register::F, 0x60);
-    expect.set(CtrlReg::STAT, 0x11);
 
     cpu.test_step(1);
     EXPECT_EQ(expect, cpu);
@@ -332,7 +327,6 @@ TEST(DMGTest, Load)
     cpu.test_step(1);
 
     expect.set(Register::PC, 0x3);
-    expect.set(CtrlReg::STAT, 0x11);
 
     EXPECT_EQ(expect, cpu);
 
@@ -346,13 +340,8 @@ TEST(DMGTest, Step)
 
     expect = cpu;
 
-    // zero the vram
-    while (cpu.get(Register::PC) != 0x0100) cpu.step();
-    // Execute the dmg
+    // Execute the boot rom. We hang at 0xe9 because we don't have a rom
+    while (cpu.get(Register::PC) != 0x00e9) cpu.step();
 
-    while (cpu.cycles() < 40000000) cpu.step();
-    while (true) cpu.step();
-
-    cpu.to_string(std::cout);
 }
 
