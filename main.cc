@@ -46,15 +46,10 @@ class Emulator {
             _cpu.load_rom(name);
         }
 
-        void run(SDL_Surface *window) {
-            SDL_Surface *gb = SDL_LoadBMP("gameboy.bmp");
-            SDL_Rect rect = { .x = 256, .h = 0 };
-            SDL_BlitSurface(gb, NULL, window, &rect);
-            SDL_FreeSurface(gb);
-
-            RenderCallable render(window);
+        void run(void) {
+            SDLDisplay display;
             _cpu.reset();
-            _cpu.set_render(&render);
+            _cpu.set_video(&display);
 
             while (!_stop) {
                 SDL_Event event;
@@ -64,7 +59,7 @@ class Emulator {
                 for (unsigned i = 0; i < 5000; i++)
                     _cpu.step();
             }
-            _cpu.set_render(NULL);
+            _cpu.set_video(NULL);
         }
 
         void OnEvent(SDL_Event *event) {
@@ -133,11 +128,6 @@ extern "C" int main(int argc, char **argv)
     if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
         return 1;
 
-    SDL_Surface *window = SDL_SetVideoMode(
-        292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF);
-    if (window == NULL)
-        myexit(1);
-
     Emulator emu;
     if (argc < 2)
         usage(argv[1]);
@@ -150,7 +140,7 @@ extern "C" int main(int argc, char **argv)
     }
 
     try {
-        emu.run(window);
+        emu.run();
     } catch (DMG::CpuException &e) {
         std::cout << "Exiting" << std::endl;
     }

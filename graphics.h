@@ -29,11 +29,17 @@
 
 namespace DMG {
 
-class RenderCallable: public DMG::Callable {
+class VideoException: protected EmuException {
 public:
-    RenderCallable(SDL_Surface *window);
+    VideoException() {};
+};
 
-    virtual void operator ()(const reg_t *ram);
+class SDLDisplay: public DMG::Video {
+public:
+    SDLDisplay(void);
+    ~SDLDisplay(void);
+
+    virtual void render(const reg_t *ram);
 
 private:
     SDL_Surface *_window;

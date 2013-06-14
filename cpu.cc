@@ -43,8 +43,7 @@ using namespace DMG;
 Cpu::Cpu(void): _AF(0), _BC(0), _DE(0), _HL(0), _SP(0), _PC(0),
     _ime(IME::Disabled), _state(State::Running),
     _cycles(0), _fcycles(0), _dcycles(0), _tcycles(0),
-    _render(NULL), _keys(0),
-    _debug(false)
+    _video(&_null_video), _keys(0), _debug(false)
 {
     _mem.resize(MEM_SIZE);
     _rom.resize(0);
@@ -1309,18 +1308,6 @@ void Cpu::interrupt(void)
     }
 }
 
-void Cpu::async_render(void)
-{
-    if (_render == NULL)
-        return;
-
-    (*_render)(&_mem[0]);
-}
-
-static inline void empty()
-{
-}
-
 #include "time.h"
 
 void Cpu::video(void)
@@ -1343,7 +1330,7 @@ void Cpu::video(void)
         }
         case DISPLAY_LINES:
             // Wait until our frame is finished
-            async_render();
+            _video->render(&_mem[0]);
             bit_set(_mem[CtrlReg::IF], Interrupt::VBlank, true);
             break;
         }

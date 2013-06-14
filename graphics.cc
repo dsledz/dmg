@@ -44,7 +44,7 @@ enum Color {
 
 unsigned global_palette[] = { Color0, Color1, Color2, Color3 };
 
-#define SCREEN_X (256 + 64)
+#define SCREEN_X 64
 #define SCREEN_Y 64
 
 static void
@@ -333,12 +333,32 @@ blit_tiles(SDL_Surface *_window, TileMap *tile_map, const reg_t *ram, bool bg)
     SDL_FreeSurface(tiles);
 }
 
-RenderCallable::RenderCallable(SDL_Surface *window):_window(window)
+SDLDisplay::SDLDisplay(void):_window(NULL)
 {
+    _window = SDL_SetVideoMode(
+        292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF);
+    if (_window == NULL)
+        throw VideoException();
+
+    SDL_Surface *gb = SDL_LoadBMP("gameboy.bmp");
+    if (gb != NULL) {
+        SDL_Rect rect = { .x = 0, .h = 0 };
+        SDL_SetColorKey(gb, SDL_SRCCOLORKEY, 0xffff00ff);
+        SDL_BlitSurface(gb, NULL, _window, &rect);
+        SDL_FreeSurface(gb);
+    }
+
+    SDL_Flip(_window);
+}
+
+SDLDisplay::~SDLDisplay(void)
+{
+    if (_window != NULL)
+        SDL_FreeSurface(_window);
 }
 
 void
-RenderCallable::operator ()(const reg_t *ram)
+SDLDisplay::render(const reg_t *ram)
 {
     reg_t lcdc = ram[CtrlReg::LCDC];
 
@@ -349,15 +369,6 @@ RenderCallable::operator ()(const reg_t *ram)
     bg_tiles.init(&ram[0x8800], false);
     TileMap obj_tiles(ram[CtrlReg::BGP]);
     obj_tiles.init(&ram[0x8000], true);
-
-    // Show the tile maps (for debugging)
-    if (true) {
-        SDL_Rect rect = { .x = 0, .y = 0 };
-        SDL_BlitSurface(obj_tiles._map, NULL, _window, &rect);
-        rect.y += 64;
-        SDL_Rect bg = { .y = 32, .h = 32, .w = 256 };
-        SDL_BlitSurface(bg_tiles._map, &bg, _window, &rect);
-    }
 
     TileMap *tiles;
     if (bit_isset(lcdc, LCDCBits::BGTileData))

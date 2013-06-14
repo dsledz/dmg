@@ -212,13 +212,6 @@ enum RamSize {
     Ram3     = 0x03,
 };
 
-class Callable {
-    public:
-        Callable() { }
-
-        virtual void operator ()(const reg_t *ram) = 0;
-};
-
 enum class GBKey {
     A = 0,
     B = 1,
@@ -231,12 +224,17 @@ enum class GBKey {
 };
 typedef std::underlying_type<GBKey>::type key_type;
 
+class Video {
+    public:
+        Video() { };
+
+        virtual void render(const reg_t *ram) { };
+};
+
 class Cpu {
 public:
     Cpu(void);
     ~Cpu(void);
-//    Cpu(const Cpu &rhs);
-//    Cpu & operator =(const Cpu &rhs);
     bool operator ==(const Cpu &rhs) const;
 
     // Cycle debug logging
@@ -248,7 +246,7 @@ public:
     void step(void);
 
     void load_rom(const std::string &name);
-    void set_render(Callable *render) { _render = render; };
+    void set_video(Video *video) { _video = video; };
     void set_key(GBKey key, bool set);
     void dump(void);
 
@@ -448,7 +446,8 @@ private:
 
     bvec _rom;
 
-    Callable *_render;
+    Video _null_video;
+    Video *_video;
     reg_t _keys;
 
     // XXX: debug
@@ -460,10 +459,6 @@ private:
     std::string _name;
 
     bvec _mem;
-
-    // Async rendering
-    void async_render(void);
-    //std::future<void> _frame;
 };
 
 enum LCDCBits {
