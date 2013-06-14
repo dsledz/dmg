@@ -28,21 +28,71 @@
 
 using namespace DMG;
 
-TEST(DMGOpcodes, Constructor) {
-    Cpu cpu;
+enum Opcode {
+    NOP = 0x00,
+    LD_HL_SP_r8 = 0xF8,
+    LD_BC_d16 = 0x01,
+    LD_BC_A = 0x02,
+    INC_BC = 0x03,
+    INC_B = 0x04,
+    DEC_B = 0x05,
+    LD_B_d8 = 0x06,
+    RLCA = 0x07,
+    LD_a16_SP = 0x08,
+    ADD_HL_BC = 0x09,
+    LD_A_BC = 0x0A,
+    DEC_BC = 0x0B,
+    INC_C = 0x0C,
+    DEC_C = 0x0D,
+    LD_C_d8 = 0x0E,
+    RRCA = 0x0F,
+    STOP = 0x10,
+    LD_DE_d16 = 0x11,
+    LD_DC_A = 0x12,
+    INC_DE = 0x13,
+    INC_D = 0x14,
+    DEC_D = 0x15,
+    LD_D_d8 = 0x16,
+    RLS = 0x17,
+    JR_r8 = 0x18,
+    ADD_HL_DE = 0x19,
+    LD_A_DE = 0x1A,
+    DEC_DE = 0x1B,
+    INC_E = 0x1C,
+    DEC_E = 0x1D,
+    LD_E_d8 = 0x1E,
+    RRA = 0x1F,
+    JR_NZ_R8 = 0x20,
+    LD_HL_d16 = 0x21,
+    LDI_HL_A = 0x22,
+    DAA = 0x27,
+    CPL = 0x2F,
+    LD_SP_d16 = 0x31,
+    LDD_HL_A = 0x32,
+    INC_A = 0x3C,
+    LD_B_B = 0x40,
+    ADD_A_B = 0x80,
+    AND_B = 0xA0,
+    XOR_A = 0xAF,
+    POP_BC = 0xC1,
+    CB = 0xCB,
+    PUSH_DE = 0xD5,
+    POP_AF = 0xF1,
+    PUSH_AF = 0xF5,
+    PUSH_BC = 0xC5,
+    POP_DE = 0xD1,
+    LD_A_C = 0x79,
+    AND_D8 = 0xE6,
+    CP_E = 0xBB,
+};
+
+static inline reg_t op_value(const Opcode &obj)
+{
+    return static_cast<std::underlying_type<Opcode>::type>(obj);
 }
 
-#define OPTEST(name, byte_code, start_regs, final_regs, steps) \
-TEST(DMGOpcodes, name) { \
-    Cpu cpu; \
-    reg_t code[] = byte_code; \
-    RegisterSet reg1 = start_regs; \
-    RegisterSet reg2 = final_regs; \
-    cpu.test_setup(reg1, code, sizeof(code)); \
-    Cpu expect(cpu); \
-    expect.set(reg2); \
-    cpu.test_step(steps); \
-    EXPECT_EQ(expect, cpu); \
+TEST(DMGOpcodes, Constructor) {
+    Cpu cpu;
 }
 
 TEST(BitOps, set)
@@ -50,20 +100,6 @@ TEST(BitOps, set)
     reg_t val;
     bit_set(val, 2, true);
     EXPECT_EQ(val, 0x4);
-}
-
-TEST(DMGOpcodes, op_0x01)
-{
-    Cpu cpu;
-    reg_t code[] = {0x01, 0x12, 0x34};
-    RegisterSet reg1 = { .A = 0 };
-    RegisterSet reg2 = { .B = 0x34, .C=0x12 };
-    cpu.test_setup(reg1, code, sizeof(code));
-
-    Cpu expect(cpu);
-    expect.set(reg2);
-    cpu.test_step(1);
-    EXPECT_EQ(expect, cpu);
 }
 
 TEST(DMGOpcodes, Nop)

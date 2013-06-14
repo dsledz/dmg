@@ -404,8 +404,9 @@ void Cpu::_swap(Register reg)
     _store(reg, value);
 }
 
-void Cpu::_cb(reg_t op)
+void Cpu::prefix_cb(void)
 {
+    reg_t op = _d8();
     int bit = (op & 0x38) >> 3;
     Register reg = Register(op & 0x7);
     if ((op & 0xF8) == 0x00) {
@@ -432,7 +433,7 @@ void Cpu::_cb(reg_t op)
         _set(reg, bit);
     } else {
         std::cout << "Unknown CB opcode: " << Print(op) << std::endl;
-        throw OpcodeException(Opcode(op));
+        throw OpcodeException(op);
     }
 }
 
@@ -519,7 +520,7 @@ void Cpu::_stop()
 {
     _d8();
     std::cout << "CPU stopped" << std::endl;
-    to_string(std::cout);
+    _dump_reg(std::cout);
     _state = State::Stopped;
 }
 
@@ -530,7 +531,7 @@ void Cpu::dump(void)
     std::cout << "MBC: " << Print(_type) << std::endl;
     std::cout << "Rom Size: " << Print(_rom_size) << std::endl;
 
-    to_string(std::cout);
+    _dump_reg(std::cout);
 }
 
 wreg_t Cpu::_storew(Register reg, wreg_t value)
@@ -696,7 +697,7 @@ void Cpu::_daa(void)
         break; \
     }
 
-void Cpu::_op(void)
+void Cpu::dispatch(void)
 {
     wreg_t pc = _PC;
     reg_t op = _mem[_PC++];
@@ -907,7 +908,7 @@ void Cpu::_op(void)
         OPCODE(0xC8, 8, 1, "RET Z", _ret(_flags.Z));
         OPCODE(0xC9, 4, 1, "RET", _ret(true));
         OPCODE(0xCA, 12, 3, "JP Z,a16", _jp(_flags.Z, _d16()));
-        OPCODE(0xCB, 16, 1, "PREFIX CB", _cb(_d8()));
+        OPCODE(0xCB, 16, 1, "PREFIX CB", prefix_cb());
         OPCODE(0xCC, 12, 3, "CALL Z,a16", _call(_flags.Z, _d16()));
         OPCODE(0xCD, 24, 3, "CALL a16", _call(true, _d16()));
         OPCODE(0xCE, 8, 2, "ADC a,d8", _adc(Register::A, _d8()));
@@ -951,17 +952,17 @@ void Cpu::_op(void)
         OPCODE(0xFF, 16, 1, "RST 38H", _rst(0x38));
     default:
         std::cout << "Unknown opcode: " << Print(op) << std::endl;
-        throw OpcodeException(Opcode(op));
+        throw OpcodeException(op);
     }
 }
 
 void Cpu::step(void)
 {
-    _handle_interrupts();
+    interrupt();
 
     switch (_state) {
     case State::Running:
-        _op();
+        dispatch();
         break;
     case State::Halted:
         _tick(4);
@@ -1026,19 +1027,7 @@ void Cpu::set(addr_t addr, reg_t value)
     _mem[addr] = value;
 }
 
-static inline reg_t op_value(const Opcode &obj)
-{
-    return static_cast<std::underlying_type<Opcode>::type>(obj);
-}
-
-static inline std::ostream& operator << (std::ostream& os, const Opcode& obj)
-{
-    os << std::hex << "0x" << std::setw(2) << std::setfill('0')
-       << int(op_value(obj));
-    return os;
-}
-
-void Cpu::to_string(std::ostream &os) const
+void Cpu::_dump_reg(std::ostream &os) const
 {
     os << "A: " << Print(_A) << " F: " << Print(_F)
        << " B: " << Print(_B) << " C: " << Print(_C)
@@ -1061,45 +1050,25 @@ void Cpu::to_string(std::ostream &os) const
     os << std::endl;
 }
 
-reg_t Cpu::load(Opcode op)
+reg_t Cpu::load(reg_t op)
 {
-    _mem[_PC++] = op_value(op);
+    _mem[_PC++] = op;
     return 1;
 }
 
-reg_t Cpu::load(Opcode op, reg_t arg)
+reg_t Cpu::load(reg_t op, reg_t arg)
 {
-    _mem[_PC++] = op_value(op);
+    _mem[_PC++] = op;
     _mem[_PC++] = arg;
     return 1;
 }
 
-reg_t Cpu::load(Opcode op, reg_t arg1, reg_t arg2)
+reg_t Cpu::load(reg_t op, reg_t arg1, reg_t arg2)
 {
-    _mem[_PC++] = op_value(op);
+    _mem[_PC++] = op;
     _mem[_PC++] = arg1;
     _mem[_PC++] = arg2;
     return 1;
-}
-
-void Cpu::set(const RegisterSet &registers)
-{
-    _A = registers.A;
-    _B = registers.B;
-    _C = registers.C;
-    _D = registers.D;
-    _E = registers.E;
-    _HL = registers.HL;
-    _SP = registers.SP;
-}
-
-void Cpu::test_setup(const RegisterSet &registers,
-                     const reg_t *code, addr_t len)
-{
-    set(registers);
-
-    memcpy(&_mem[0], code, len);
-    _PC = len;
 }
 
 void Cpu::test_step(unsigned steps)
@@ -1109,20 +1078,12 @@ void Cpu::test_step(unsigned steps)
         step();
 }
 
-void Cpu::_dma(reg_t value)
-{
-    addr_t dest = Mem::OAMTable;
-    addr_t src = (addr_t)value << 8;
-    memcpy(&_mem[dest], &_mem[src], 40*4);
-}
-
 void Cpu::_write(addr_t addr, reg_t value)
 {
-    if (addr == 0xFFFF) {
-        // Interrupt
-    } else if (addr >= 0xFF80) {
+    if (addr >= 0xFF80) {
         // Internal RAM
     } else if (addr >= 0xFF00) {
+        // I/O
         switch (addr) {
         case CtrlReg::KEYS:
             // copy current keys
@@ -1138,14 +1099,16 @@ void Cpu::_write(addr_t addr, reg_t value)
             // Nuke the DMG ROM
             memcpy(&_mem[0], &_rom[0], 256);
             break;
-        case CtrlReg::DMA:
+        case CtrlReg::DMA: {
             // Start the DMA transfer
-            // XXX: Should we actually delay it?
-            _dma(value);
+            addr_t dest = Mem::OAMTable;
+            addr_t src = (addr_t)value << 8;
+            memcpy(&_mem[dest], &_mem[src], 40*4);
             break;
         }
-    } else if (addr >= 0xFF00) {
-        // I/O
+        default:
+            break;
+        }
     } else if (addr >= 0xFEA0) {
         // Empty I/O
     } else if (addr >= 0xFE00) {
@@ -1313,7 +1276,10 @@ addr_t InterruptVector[] = {
     0x60, /* Interrupt::Joypad */
 };
 
-void Cpu::_handle_interrupts(void)
+/**
+ * Process interrupts before dispatch
+ */
+void Cpu::interrupt(void)
 {
     reg_t flags = _mem[CtrlReg::IF];
     if (_ime == IME::Disabled) {

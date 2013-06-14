@@ -70,6 +70,36 @@ static inline bool bit_isset(reg_t reg, unsigned n)
     return (reg & (1 << n));
 }
 
+/*  _____                    _   _
+ * | ____|_  _____ ___ _ __ | |_(_) ___  _ __  ___
+ * |  _| \ \/ / __/ _ \ '_ \| __| |/ _ \| '_ \/ __|
+ * | |___ >  < (_|  __/ |_) | |_| | (_) | | | \__ \
+ * |_____/_/\_\___\___| .__/ \__|_|\___/|_| |_|___/
+ *                    |_|
+ */
+class EmuException {
+public:
+    EmuException() {};
+};
+
+class CpuException: protected EmuException {
+public:
+    CpuException() {};
+};
+
+class OpcodeException: protected EmuException {
+public:
+    OpcodeException(reg_t op): _op(op) { };
+private:
+    reg_t _op;
+};
+
+class RomException: protected EmuException {
+public:
+    RomException(const std::string &name): rom(name) {};
+    std::string rom;
+};
+
 enum class IME {
     Disabled = 0,
     Shadow = 1,
@@ -80,64 +110,6 @@ enum class State {
     Running = 0,
     Halted = 1,
     Stopped = 2,
-};
-
-enum class Opcode {
-    NOP = 0x00,
-    LD_HL_SP_r8 = 0xF8,
-    LD_BC_d16 = 0x01,
-    LD_BC_A = 0x02,
-    INC_BC = 0x03,
-    INC_B = 0x04,
-    DEC_B = 0x05,
-    LD_B_d8 = 0x06,
-    RLCA = 0x07,
-    LD_a16_SP = 0x08,
-    ADD_HL_BC = 0x09,
-    LD_A_BC = 0x0A,
-    DEC_BC = 0x0B,
-    INC_C = 0x0C,
-    DEC_C = 0x0D,
-    LD_C_d8 = 0x0E,
-    RRCA = 0x0F,
-    STOP = 0x10,
-    LD_DE_d16 = 0x11,
-    LD_DC_A = 0x12,
-    INC_DE = 0x13,
-    INC_D = 0x14,
-    DEC_D = 0x15,
-    LD_D_d8 = 0x16,
-    RLS = 0x17,
-    JR_r8 = 0x18,
-    ADD_HL_DE = 0x19,
-    LD_A_DE = 0x1A,
-    DEC_DE = 0x1B,
-    INC_E = 0x1C,
-    DEC_E = 0x1D,
-    LD_E_d8 = 0x1E,
-    RRA = 0x1F,
-    JR_NZ_R8 = 0x20,
-    LD_HL_d16 = 0x21,
-    LDI_HL_A = 0x22,
-    DAA = 0x27,
-    CPL = 0x2F,
-    LD_SP_d16 = 0x31,
-    LDD_HL_A = 0x32,
-    INC_A = 0x3C,
-    LD_B_B = 0x40,
-    ADD_A_B = 0x80,
-    AND_B = 0xA0,
-    XOR_A = 0xAF,
-    POP_BC = 0xC1,
-    CB = 0xCB,
-    PUSH_DE = 0xD5,
-    POP_AF = 0xF1,
-    PUSH_AF = 0xF5,
-    PUSH_BC = 0xC5,
-    POP_DE = 0xD1,
-    LD_A_C = 0x79,
-    AND_D8 = 0xE6,
-    CP_E = 0xBB,
 };
 
 enum class Register {
@@ -240,56 +212,11 @@ enum RamSize {
     Ram3     = 0x03,
 };
 
-class EmuException {
-public:
-    EmuException() {};
-};
-
-class CpuException: protected EmuException {
-public:
-    CpuException() {};
-};
-
-class OpcodeException: protected EmuException {
-public:
-    OpcodeException(Opcode op): _op(op) { };
-private:
-    Opcode _op;
-};
-
-class RomException: protected EmuException {
-public:
-    RomException(const std::string &name): rom(name) {};
-    std::string rom;
-};
-
-class Address {
-public:
-    Address(reg_t &reg, addr_t addr): _reg(reg), _addr(addr) { }
-
-    Address & operator =(const reg_t &rhs);
-
-private:
-    reg_t &_reg;
-    addr_t _addr;
-};
-
 class Callable {
     public:
         Callable() { }
 
         virtual void operator ()(const reg_t *ram) = 0;
-};
-
-struct RegisterSet {
-    reg_t A;
-    reg_t B;
-    reg_t C;
-    reg_t D;
-    reg_t E;
-    wreg_t HL;
-    wreg_t SP;
-    wreg_t PC;
 };
 
 enum class GBKey {
@@ -312,8 +239,6 @@ public:
 //    Cpu & operator =(const Cpu &rhs);
     bool operator ==(const Cpu &rhs) const;
 
-    void to_string(std::ostream &os) const;
-
     // Cycle debug logging
     void debug(bool debug) { _debug = debug; };
     void toggle_debug(void) { _debug = !_debug; };
@@ -322,44 +247,61 @@ public:
     void reset(void);
     void step(void);
 
+    void load_rom(const std::string &name);
+    void set_render(Callable *render) { _render = render; };
+    void set_key(GBKey key, bool set);
+    void dump(void);
+
     // Exposed for testing only
-    reg_t load(Opcode op);
-    reg_t load(Opcode op, byte_t arg);
-    reg_t load(Opcode op, byte_t arg1, byte_t arg2);
-    void test_setup(const RegisterSet &registers, const reg_t *code, addr_t len);
-    void test_step(unsigned steps);
 
     // Test functions
-    void set(const RegisterSet &registers);
+    reg_t load(reg_t op);
+    reg_t load(reg_t op, byte_t arg);
+    reg_t load(reg_t op, byte_t arg1, byte_t arg2);
+    void test_step(unsigned steps);
     void set(Register reg, wreg_t value);
     void set(addr_t addr, reg_t value);
     wreg_t get(Register reg);
     reg_t get(addr_t addr);
     unsigned cycles(void) { return _cycles; };
 
-    void load_rom(const std::string &name);
-    void set_render(Callable *render) { _render = render; };
-    void set_key(GBKey key, bool set);
-    void dump(void);
-
 protected:
 
-    void _op(void);
+    /* Top level stages */
+    void dispatch(void);
+    void prefix_cb(void);
+    void interrupt(void);
+    void video();
+    void timer();
 
+    /* Addition */
     void _add(Register reg, reg_t value);
+    void _addw(Register reg, wreg_t value);
     void _adc(Register reg, reg_t value);
+    void _inc(Register reg);
+    void _incw(Register reg);
+
+    /* Subtraction */
     void _sub(Register reg, reg_t value);
+    void _subw(Register reg, wreg_t value);
     void _sbc(Register reg, reg_t value);
+    void _dec(Register reg);
+    void _decw(Register reg);
+
+    /* Load */
+    void _ld(Register reg, reg_t value);
+    void _ldw(Register reg, wreg_t value);
+    void _ldi(addr_t addr, Register reg);
+    void _ldi(addr_t addr, reg_t value);
+    void _ldwi(addr_t addr, Register reg);
+
+    /* Bitwise ops */
     void _and(Register reg, reg_t value);
     void _xor(Register reg, reg_t value);
     void _or(Register reg, reg_t value);
-    void _ld(Register reg, reg_t value);
-    void _cb(reg_t op);
     void _bit(Register reg, int bit);
     void _res(Register reg, int bit);
     void _set(Register reg, int bit);
-    void _inc(Register reg);
-    void _dec(Register reg);
     void _swap(Register reg);
     void _rl(Register reg);
     void _rla(void);
@@ -372,27 +314,12 @@ protected:
     void _sla(Register reg);
     void _sra(Register reg);
     void _srl(Register reg);
+
+    void _cp(reg_t lhs, reg_t rhs);
     void _daa(void);
     void _cpl(void);
     void _ccf(void);
     void _scf(void);
-
-    void _cp(reg_t lhs, reg_t rhs);
-
-    reg_t _store(Register reg, reg_t value);
-    reg_t _fetch(Register reg);
-
-    wreg_t _storew(Register reg, wreg_t value);
-    wreg_t _fetchw(Register reg);
-    void _addw(Register reg, wreg_t value);
-    void _incw(Register reg);
-    void _subw(Register reg, wreg_t value);
-    void _ldw(Register reg, wreg_t value);
-    void _decw(Register reg);
-
-    void _ldi(addr_t addr, Register reg);
-    void _ldi(addr_t addr, reg_t value);
-    void _ldwi(addr_t addr, Register reg);
 
     void _stop(void);
     void _halt(void);
@@ -407,14 +334,20 @@ protected:
     void _push(wreg_t reg);
     void _pop(wreg_t &reg);
 
-    void _read_rom(const std::string &name, bvec &rom);
+    /* Store/Load */
+    reg_t _store(Register reg, reg_t value);
+    wreg_t _storew(Register reg, wreg_t value);
+    reg_t _fetch(Register reg);
+    wreg_t _fetchw(Register reg);
+    void _write(addr_t addr, reg_t value);
+    inline void _tick(unsigned cycles) {
+        _cycles += cycles;
+        _fcycles += cycles;
+        _dcycles += cycles;
+        _tcycles += cycles;
+    }
 
-    reg_t to_reg(Register reg);
-
-    // Video processing XXX: bad name
-    void video();
-    void timer();
-
+    /* decode accessors */
     inline wreg_t _d16(void) {
         wreg_t tmp = _mem[_PC] | (_mem[_PC+1] << 8);
         if (_debug)
@@ -444,11 +377,10 @@ protected:
         return tmp;
     }
 
-    void _dma(reg_t value);
-    void _write(addr_t addr, reg_t value);
+    void _read_rom(const std::string &name, bvec &rom);
+    void _dump_reg(std::ostream &os) const;
 
 private:
-    // XXX: remaining flags
     // Exploit the endianness of the fields so we can access a single
     // byte of 16 bit value
     union {
@@ -506,8 +438,6 @@ private:
         wreg_t _PC;
     };
 
-    void _interrupt(Interrupt interrupt);
-    void _handle_interrupts(void);
     IME _ime;
     State _state;
 
@@ -515,12 +445,6 @@ private:
     unsigned _fcycles; // Current number of cycles since start of hblank
     unsigned _dcycles; // Number of cycles since divider timer
     unsigned _tcycles; // Number of cycles since timer tick
-    inline void _tick(unsigned cycles) {
-        _cycles += cycles;
-        _fcycles += cycles;
-        _dcycles += cycles;
-        _tcycles += cycles;
-    }
 
     bvec _rom;
 
