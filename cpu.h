@@ -237,10 +237,6 @@ public:
     ~Cpu(void);
     bool operator ==(const Cpu &rhs) const;
 
-    // Cycle debug logging
-    void debug(bool debug) { _debug = debug; };
-    void toggle_debug(void) { _debug = !_debug; };
-
     // DMG execution
     void reset(void);
     void step(void);
@@ -248,6 +244,7 @@ public:
     void load_rom(const std::string &name);
     void set_video(Video *video) { _video = video; };
     void set_key(GBKey key, bool set);
+    void toggle_debug(void) { _debug = !_debug; };
     void dump(void);
 
     // Exposed for testing only
@@ -385,10 +382,7 @@ private:
         struct {
             union {
                 struct {
-                    reg_t U0:1;
-                    reg_t U1:1;
-                    reg_t U2:1;
-                    reg_t U3:1;
+                    reg_t reserved:4;
                     reg_t C:1;
                     reg_t H:1;
                     reg_t N:1;

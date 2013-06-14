@@ -259,7 +259,6 @@ TEST(DMGOpcodes, ldd_loop)
     expect.set(Register::SP, 0xfffe);
     expect.set(CtrlReg::STAT, 0x11);
 
-    cpu.debug(false);
     // Run until we've zeroed out the vram
     cpu.test_step(0x2000 * 3 + 3);
 }
