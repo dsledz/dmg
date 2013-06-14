@@ -111,32 +111,36 @@ class Emulator {
         bool _stop;
 };
 
-static void myexit(int ret)
-{
-    SDL_Quit();
-    exit(ret);
-}
+struct SDLObject {
+    SDLObject(void) {
+        if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
+            exit(1);
+    }
+    ~SDLObject() {
+        SDL_Quit();
+    }
+};
 
 static void usage(const std::string &app)
 {
     std::cout << app << " <rom>" << std::endl;
-    myexit(0);
 }
 
 extern "C" int main(int argc, char **argv)
 {
-    if (SDL_Init(SDL_INIT_EVERYTHING) < 0)
-        return 1;
+    SDLObject sdl;
 
     Emulator emu;
-    if (argc < 2)
+    if (argc < 2) {
         usage(argv[1]);
+        return 0;
+    }
 
     try {
         emu.load(argv[1]);
     } catch (DMG::RomException &e) {
         std::cout << "Unable to read rom: " << e.rom << std::endl;
-        myexit(1);
+        return 1;
     }
 
     try {
@@ -145,6 +149,5 @@ extern "C" int main(int argc, char **argv)
         std::cout << "Exiting" << std::endl;
     }
 
-    SDL_Quit();
     return 0;
 }
