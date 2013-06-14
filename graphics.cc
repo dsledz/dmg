@@ -28,12 +28,11 @@
  * would display.
  */
 
-#include "SDL/sdl.h"
-
-#include "cpu.h"
 #include "graphics.h"
+#include "cpu.h"
 
 using namespace DMG;
+
 enum Color {
     Color0 = 0xffffffff,
     Color1 = 0xffbbbbbb,
@@ -46,6 +45,16 @@ unsigned global_palette[] = { Color0, Color1, Color2, Color3 };
 
 #define SCREEN_X 64
 #define SCREEN_Y 64
+
+static surface_ptr
+create_surface(short w, short h, bool alpha)
+{
+    SDL_Surface * s = SDL_CreateRGBSurface(SDL_SWSURFACE, w, h, 32,
+        0x000000ff, 0x0000ff00, 0x00ff0000, alpha ? 0xff000000 : 0x00000000);
+    if (s == NULL)
+        throw VideoException();
+    return surface_ptr(s);
+}
 
 static void
 convert_palette(unsigned *palette, reg_t byte, bool obj)
@@ -98,25 +107,17 @@ class TileMap {
     private:
         TileMap(const TileMap &rhs) { }
     public:
-        TileMap(reg_t palette): _map(NULL) {
+        TileMap(reg_t palette) {
             convert_palette(_palette, palette, false);
         }
         ~TileMap() {
-            if (_map) {
-                SDL_FreeSurface(_map);
-                _map = NULL;
-            }
         }
 
         void init(const reg_t *map_data, bool base) {
-            if (_map != NULL)
-                SDL_FreeSurface(_map);
             _base = base;
-            _map = SDL_CreateRGBSurface(
-                SDL_SWSURFACE, 256, 64, 32, 0x000000ff, 0x0000ff00,
-                0x00ff0000, 0xff000000);
+            _map = create_surface(256, 64, false);
 
-            SDL_LockSurface(_map);
+            SDL_LockSurface(_map.get());
             unsigned *pixels = (unsigned *)_map->pixels;
             for (unsigned y = 0; y < 8; y++) {
                 for (unsigned x = 0; x < 32; x++) {
@@ -128,7 +129,7 @@ class TileMap {
                     }
                 }
             }
-            SDL_UnlockSurface(_map);
+            SDL_UnlockSurface(_map.get());
         }
 
         SDL_Rect *tile(reg_t idx) {
@@ -143,7 +144,11 @@ class TileMap {
             return &_tile_rect;
         }
 
-        SDL_Surface *_map;
+        SDL_Surface *map(void) {
+            return _map.get();
+        }
+
+        surface_ptr _map;
         SDL_Rect _tile_rect;
         unsigned _palette[4];
         bool _base;
@@ -153,20 +158,18 @@ class Sprite {
     private:
         Sprite(const Sprite &rhs) { }
     public:
-        Sprite(void): _sprite(NULL) { }
-        ~Sprite(void) {
-            if (_sprite) {
-                SDL_FreeSurface(_sprite);
-                _sprite = NULL;
-            }
-        }
+        Sprite(void) { }
+        ~Sprite(void) { }
         void init(unsigned idx, const reg_t *ram, const reg_t *oam) {
             reg_t lcdc = ram[CtrlReg::LCDC];
-            memcpy(_bytes, oam, sizeof(_bytes));
+            _Y = oam[Oam::OamY];
+            _X = oam[Oam::OamX];
+            _pattern = oam[Oam::OamPattern];
+            _flags = oam[Oam::OamFlags];
 
             unsigned palette[4];
 
-            if (bit_isset(_bytes[Oam::OamFlags], 4))
+            if (bit_isset(_flags, 4))
                 convert_palette(palette, ram[CtrlReg::OBP1], true);
             else
                 convert_palette(palette, ram[CtrlReg::OBP0], true);
@@ -176,23 +179,22 @@ class Sprite {
             _idx = idx;
             _rect.w = 8;
             if (bit_isset(lcdc, LCDCBits::OBJSize)) {
-                _bytes[Oam::OamPattern] &= 0xFE;
+                _pattern &= 0xFE;
                 _rect.h = 16;
             } else {
                 _rect.h = 8;
             }
-            _rect.x = SCREEN_X - 8 + _bytes[Oam::OamX];
-            _rect.y = SCREEN_Y - 16 + _bytes[Oam::OamY];
+            _rect.x = SCREEN_X - 8 + _X;
+            _rect.y = SCREEN_Y - 16 + _Y;
 
-            _sprite = SDL_CreateRGBSurface(SDL_SWSURFACE, _rect.w, _rect.h,
-                32, 0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000);
+            _sprite = create_surface(_rect.w, _rect.h, true);
 
-            SDL_LockSurface(_sprite);
+            SDL_LockSurface(_sprite.get());
             unsigned *pixels = (unsigned *)_sprite->pixels;
 
             // Handle first half of the sprite
             const reg_t *data = &ram[Mem::ObjTiles];
-            data += _bytes[Oam::OamPattern] * 16;
+            data += _pattern * 16;
             for (unsigned i = 0; i < 8; i++) {
                 convert_line(&pixels[i * _rect.w], *data++, *data++,
                     palette, false);
@@ -204,139 +206,132 @@ class Sprite {
                     convert_line(&pixels[(i + 8) * _rect.w], *data++, *data++,
                         palette, false);
             }
-            if (bit_isset(_bytes[Oam::OamFlags], 5))
-                flip_horizontal(_sprite);
-            if (bit_isset(_bytes[Oam::OamFlags], 6))
-                flip_vertical(_sprite);
-            SDL_UnlockSurface(_sprite);
+            if (bit_isset(_flags, 5))
+                flip_horizontal(_sprite.get());
+            if (bit_isset(_flags, 6))
+                flip_vertical(_sprite.get());
+            SDL_UnlockSurface(_sprite.get());
+        }
+
+        void blit(SDL_Surface *window)
+        {
+            if (!visible())
+                return;
+
+            // XXX: Clip the sprite to the window.
+            SDL_BlitSurface(_sprite.get(), NULL, window, &_rect);
         }
 
         bool visible(void) {
-            if (_bytes[Oam::OamX] == 0 || _bytes[Oam::OamX] >= 168)
+            if (_X == 0 || _X >= 168)
                 return false;
-            if (_bytes[Oam::OamY] == 0 || _bytes[Oam::OamY] >= 160)
+            if (_Y == 0 || _Y >= 160)
                 return false;
             return true;
         }
 
-        SDL_Rect *rect(void) {
-            return &_rect;
-        }
-
-        SDL_Surface *surface(void) {
-            return _sprite;
-        }
-
     private:
 
-        reg_t _bytes[4];
-        SDL_Surface *_sprite;
+        reg_t _X;
+        reg_t _Y;
+        reg_t _pattern;
+        reg_t _flags;
+        surface_ptr _sprite;
         SDL_Rect _rect;
         reg_t _idx;
 };
 
-static void
-blit_tiles(SDL_Surface *_window, TileMap *tile_map, const reg_t *ram, bool bg)
+static surface_ptr
+create_map(TileMap *tile_map, const reg_t *map)
 {
-    reg_t lcdc = ram[CtrlReg::LCDC];
-
-    const reg_t *map = NULL;
-    if (bg)
-        map = bit_isset(lcdc, LCDCBits::BGTileMap) ?
-            &ram[0x9C00] : &ram[0x9800];
-    else
-        map = bit_isset(lcdc, LCDCBits::WindowTileMap) ?
-            &ram[0x9C00] : &ram[0x9800];
-
     // Render the tiles
-    SDL_Surface *tiles = SDL_CreateRGBSurface(
-        SDL_SWSURFACE, 256, 256, 32, 0x000000ff, 0x0000ff00,
-        0x00ff0000, 0);
-    SDL_LockSurface(tiles);
-    memset(tiles->pixels, 0x00, 256*256*4);
-    SDL_UnlockSurface(tiles);
+    surface_ptr tiles = create_surface(256, 256, false);
+    SDL_LockSurface(tiles.get());
+    memset(tiles->pixels, 0x00, tiles->w*tiles->h*4);
+    SDL_UnlockSurface(tiles.get());
 
-    if (bit_isset(lcdc, LCDCBits::LCDEnabled)) {
-        for (unsigned y = 0; y < 32; y++) {
-            for (unsigned x = 0; x < 32; x++) {
-                SDL_Rect rect = {};
-                rect.y = y * 8;
-                rect.x = x * 8;
-                SDL_BlitSurface(
-                    tile_map->_map,
-                    tile_map->tile(map[y * 32 + x]),
-                    tiles,
-                    &rect);
-            }
+    for (unsigned y = 0; y < 32; y++) {
+        for (unsigned x = 0; x < 32; x++) {
+            SDL_Rect rect = {};
+            rect.y = y * 8;
+            rect.x = x * 8;
+            SDL_BlitSurface(
+                tile_map->map(),
+                tile_map->tile(map[y * 32 + x]),
+                tiles.get(),
+                &rect);
         }
     }
 
-    if (bg) {
-        reg_t scx = ram[CtrlReg::SCX];
-        reg_t scy = ram[CtrlReg::SCY];
-        // Blit the tiles on to the window
-        SDL_Rect clipped = { .x = scx, .y = scy, .h = 144, .w = 160 };
-        short x_overscan = 0;
-        short y_overscan = 0;
-        if (clipped.x + clipped.w > 256) {
-            x_overscan = clipped.x + clipped.w - 256;
-            clipped.w -= x_overscan;
-        }
-        if (clipped.y + clipped.h > 256) {
-            y_overscan = clipped.y + clipped.h - 256;
-            clipped.h -= y_overscan;
-        }
-
-        SDL_Rect window_rect = { .x = SCREEN_X, .y = SCREEN_Y };
-        SDL_BlitSurface(tiles, &clipped, _window, &window_rect);
-
-        if (x_overscan > 0) {
-            window_rect.x += clipped.w;
-            window_rect.y = 64;
-            clipped.x = 0;
-            clipped.w = x_overscan;
-            SDL_BlitSurface(tiles, &clipped, _window, &window_rect);
-
-            if (y_overscan > 0) {
-                window_rect.y += clipped.y;
-                clipped.y = 0;
-                clipped.h = y_overscan;
-                SDL_BlitSurface(tiles, &clipped, _window, &window_rect);
-            }
-        }
-
-        if (y_overscan > 0) {
-            window_rect.x = SCREEN_X;
-            window_rect.y = SCREEN_Y;
-            clipped.x = scx;
-            clipped.y = 0;
-            clipped.h = y_overscan;
-            clipped.w = 160 - x_overscan;
-            SDL_BlitSurface(tiles, &clipped, _window, &window_rect);
-        }
-    } else {
-        short wx = ram[CtrlReg::WX];
-        short wy = ram[CtrlReg::WY];
-        if (wx <= 166) {
-            // XXX: Handle window offset better (wx < 7)
-            SDL_Rect clipped = {};
-            wx -= 7;
-            clipped.h = 144 - wy;
-            clipped.w = 160 - wx;
-            wx += SCREEN_X;
-            wy += SCREEN_Y;
-            SDL_Rect window_rect = { .x = wx, .y = wy };
-            SDL_BlitSurface(tiles, &clipped, _window, &window_rect);
-        }
-    }
-
-    SDL_FreeSurface(tiles);
+    return std::move(tiles);
 }
 
-SDLDisplay::SDLDisplay(void):_window(NULL)
+static void
+blit_bg(SDL_Surface *window, SDL_Surface *bg, short scx, short scy)
 {
-    _window = SDL_SetVideoMode(
-        292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF);
+    // Blit the tiles on to the window
+    SDL_Rect clipped = { .x = scx, .y = scy, .h = 144, .w = 160 };
+    short x_overscan = 0;
+    short y_overscan = 0;
+    if (clipped.x + clipped.w > 256) {
+        x_overscan = clipped.x + clipped.w - 256;
+        clipped.w -= x_overscan;
+    }
+    if (clipped.y + clipped.h > 256) {
+        y_overscan = clipped.y + clipped.h - 256;
+        clipped.h -= y_overscan;
+    }
+
+    SDL_Rect window_rect = { .x = SCREEN_X, .y = SCREEN_Y };
+    SDL_BlitSurface(bg, &clipped, window, &window_rect);
+
+    if (x_overscan > 0) {
+        window_rect.x += clipped.w;
+        window_rect.y = 64;
+        clipped.x = 0;
+        clipped.w = x_overscan;
+        SDL_BlitSurface(bg, &clipped, window, &window_rect);
+
+        if (y_overscan > 0) {
+            window_rect.y += clipped.y;
+            clipped.y = 0;
+            clipped.h = y_overscan;
+            SDL_BlitSurface(bg, &clipped, window, &window_rect);
+        }
+    }
+
+    if (y_overscan > 0) {
+        window_rect.x = SCREEN_X;
+        window_rect.y = SCREEN_Y;
+        clipped.x = scx;
+        clipped.y = 0;
+        clipped.h = y_overscan;
+        clipped.w = 160 - x_overscan;
+        SDL_BlitSurface(bg, &clipped, window, &window_rect);
+    }
+
+}
+
+static void
+blit_window(SDL_Surface *window, SDL_Surface *win, short wx, short wy)
+{
+    if (wx <= 166 && wy <= 144) {
+        // XXX: Handle window offset better (wx < 7)
+        SDL_Rect clipped = {};
+        wx -= 7;
+        clipped.h = 144 - wy;
+        clipped.w = 160 - wx;
+        wx += SCREEN_X;
+        wy += SCREEN_Y;
+        SDL_Rect window_rect = { .x = wx, .y = wy };
+        SDL_BlitSurface(win, &clipped, window, &window_rect);
+    }
+}
+
+SDLDisplay::SDLDisplay(void)
+{
+    _window = surface_ptr(SDL_SetVideoMode(
+        292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF));
     if (_window == NULL)
         throw VideoException();
 
@@ -344,17 +339,15 @@ SDLDisplay::SDLDisplay(void):_window(NULL)
     if (gb != NULL) {
         SDL_Rect rect = { .x = 0, .h = 0 };
         SDL_SetColorKey(gb, SDL_SRCCOLORKEY, 0xffff00ff);
-        SDL_BlitSurface(gb, NULL, _window, &rect);
+        SDL_BlitSurface(gb, NULL, _window.get(), &rect);
         SDL_FreeSurface(gb);
     }
 
-    SDL_Flip(_window);
+    SDL_Flip(_window.get());
 }
 
 SDLDisplay::~SDLDisplay(void)
 {
-    if (_window != NULL)
-        SDL_FreeSurface(_window);
 }
 
 void
@@ -376,11 +369,23 @@ SDLDisplay::render(const reg_t *ram)
     else
         tiles = &bg_tiles;
 
-    if (bit_isset(lcdc, LCDCBits::BGDisplay))
-        blit_tiles(_window, tiles, ram, true);
+    if (bit_isset(lcdc, LCDCBits::BGDisplay)) {
+        const reg_t *map = bit_isset(lcdc, LCDCBits::BGTileMap) ?
+            &ram[0x9C00] : &ram[0x9800];
+        surface_ptr bg(create_map(tiles, map));
+        short scx = ram[CtrlReg::SCX];
+        short scy = ram[CtrlReg::SCY];
+        blit_bg(_window.get(), bg.get(), scx, scy);
+    }
 
-    if (bit_isset(lcdc, LCDCBits::WindowDisplay))
-        blit_tiles(_window, tiles, ram, false);
+    if (bit_isset(lcdc, LCDCBits::WindowDisplay)) {
+        const reg_t *map = bit_isset(lcdc, LCDCBits::WindowTileMap) ?
+            &ram[0x9C00] : &ram[0x9800];
+        surface_ptr win(create_map(tiles, map));
+        short wx = ram[CtrlReg::WX];
+        short wy = ram[CtrlReg::WY];
+        blit_window(_window.get(), win.get(), wx, wy);
+    }
 
     const reg_t *oam = &ram[0xFE00];
     Sprite sprites[40];
@@ -389,15 +394,11 @@ SDLDisplay::render(const reg_t *ram)
         oam += 4;
     }
 
-    unsigned i = 40;
-    while (i > 0 && bit_isset(lcdc, LCDCBits::OBJDisplay)) {
-        if (sprites[i].visible())
-            SDL_BlitSurface(sprites[i].surface(), NULL,
-                            _window, sprites[i].rect());
-        i--;
-    }
+    if (bit_isset(lcdc, LCDCBits::OBJDisplay))
+        for (unsigned i = 40; i > 0; i--)
+            sprites[i-1].blit(_window.get());
 
     // Show the screen
-    SDL_Flip(_window);
+    SDL_Flip(_window.get());
 }
 

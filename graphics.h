@@ -25,7 +25,11 @@
 
 #pragma once
 
+#include <memory>
+
 #include "SDL/sdl.h"
+
+#include "cpu.h"
 
 namespace DMG {
 
@@ -33,6 +37,12 @@ class VideoException: protected EmuException {
 public:
     VideoException() {};
 };
+
+struct surface_deleter {
+    void operator ()(SDL_Surface *p) { if (p) SDL_FreeSurface(p); };
+};
+
+typedef std::unique_ptr<SDL_Surface, surface_deleter> surface_ptr;
 
 class SDLDisplay: public DMG::Video {
 public:
@@ -42,7 +52,7 @@ public:
     virtual void render(const reg_t *ram);
 
 private:
-    SDL_Surface *_window;
+    surface_ptr _window;
 };
 
 };
