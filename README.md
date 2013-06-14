@@ -1,4 +1,4 @@
-dmg
+DMG Emulator
 ===
 
 Simple Gameboy Emulator using SDL in C++/SDL.
@@ -11,11 +11,11 @@ Build instructions:
     # make
     # ./dmg <rom>
 
-The only supported input is the keyboard.
-- A = 'a'
-- B = 's'
-- Select = 'z'
-- Start = 'x'
+The only supported input is the keyboard. Key re-mapping is not supported.
+- A is 'a'
+- B is 's'
+- Select is 'z'
+- Start is 'x'
 - Arrow keys
 
 Don't ask me where to find ROMs.
