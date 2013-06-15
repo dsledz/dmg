@@ -43,7 +43,7 @@ using namespace DMG;
 Cpu::Cpu(void): _AF(0), _BC(0), _DE(0), _HL(0), _SP(0), _PC(0),
     _ime(IME::Disabled), _state(State::Running),
     _cycles(0), _fcycles(0), _dcycles(0), _tcycles(0),
-    _video(&_null_video), _keys(0), _debug(false)
+    _video(&_null_video), _control(&_null_controller), _debug(false)
 {
     _mem.resize(MEM_SIZE);
     _rom.resize(0);
@@ -1086,13 +1086,10 @@ void Cpu::_write(addr_t addr, reg_t value)
         switch (addr) {
         case CtrlReg::KEYS:
             // copy current keys
-            if ((value & 0x10) == 0) {
-                value &= 0xF0;
-                value |= ~(_keys >> 4) & 0x0F;
-            } else if ((value & 0x20) == 0) {
-                value &= 0xF0;
-                value |= ~_keys & 0x0F;
-            }
+            if ((value & 0x10) == 0)
+                value = (value & 0xF0) | _control->get_arrows();
+            else if ((value & 0x20) == 0)
+                value = (value & 0xF0) | _control->get_buttons();
             break;
         case CtrlReg::DMG_RESET:
             // Nuke the DMG ROM
@@ -1353,7 +1350,7 @@ void Cpu::video(void)
 
 void Cpu::set_key(GBKey key, bool set)
 {
-    bit_set(_keys, static_cast<key_type>(key), set);
+    // XXX: Where do we put this?
     if (_state == State::Stopped)
         _state = State::Running;
 }

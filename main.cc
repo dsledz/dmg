@@ -29,6 +29,7 @@
 
 #include "cpu.h"
 #include "graphics.h"
+#include "control.h"
 
 using namespace DMG;
 
@@ -48,56 +49,47 @@ class Emulator {
 
         void run(void) {
             SDLDisplay display;
+            SDLController control;
             _cpu.reset();
             _cpu.set_video(&display);
+            _cpu.set_control(&control);
 
             while (!_stop) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event))
-                    OnEvent(&event);
+                    OnEvent(&control, &event);
 
                 for (unsigned i = 0; i < 5000; i++)
                     _cpu.step();
             }
             _cpu.set_video(NULL);
+            _cpu.set_control(NULL);
         }
 
-        void OnEvent(SDL_Event *event) {
+        void OnEvent(SDLController *control, SDL_Event *event) {
             switch (event->type) {
             case SDL_QUIT:
                 _stop = true;
                 break;
             case SDL_KEYUP:
+                control->handle_key(event);
+                break;
             case SDL_KEYDOWN: {
-                bool set = (event->type == SDL_KEYDOWN);
                 // Gameboy keys
+                control->handle_key(event);
+                // Control keys
                 switch (event->key.keysym.sym) {
-                case SDLK_a: _cpu.set_key(GBKey::A, set); break;
-                case SDLK_s: _cpu.set_key(GBKey::B, set); break;
-                case SDLK_z: _cpu.set_key(GBKey::Select, set); break;
-                case SDLK_x: _cpu.set_key(GBKey::Start, set); break;
-                case SDLK_LEFT: _cpu.set_key(GBKey::Left, set); break;
-                case SDLK_RIGHT: _cpu.set_key(GBKey::Right, set); break;
-                case SDLK_UP: _cpu.set_key(GBKey::Up, set); break;
-                case SDLK_DOWN: _cpu.set_key(GBKey::Down, set); break;
+                case SDLK_q:
+                    _stop = true;
+                    break;
+                case SDLK_F2:
+                    _cpu.dump();
+                    break;
+                case SDLK_F1:
+                    _cpu.toggle_debug();
+                    break;
                 default:
                     break;
-                }
-                // Control keys
-                if (set) {
-                    switch (event->key.keysym.sym) {
-                    case SDLK_q:
-                        _stop = true;
-                        break;
-                    case SDLK_F2:
-                        _cpu.dump();
-                        break;
-                    case SDLK_F1:
-                        _cpu.toggle_debug();
-                        break;
-                    default:
-                        break;
-                    }
                 }
                 break;
             }

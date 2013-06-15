@@ -221,14 +221,27 @@ enum class GBKey {
     Left = 5,
     Up = 6,
     Down = 7,
+    None = 8,
+    Size = 8,
 };
-typedef std::underlying_type<GBKey>::type key_type;
+static inline reg_t key_value(GBKey key) {
+    return static_cast<std::underlying_type<GBKey>::type>(key);
+}
+
 
 class Video {
-    public:
-        Video() { };
+public:
+    Video() { };
 
-        virtual void render(const reg_t *ram) { };
+    virtual void render(const reg_t *ram) { };
+};
+
+class Controller {
+public:
+    Controller() { };
+
+    virtual reg_t get_buttons(void) const { return 0x0F; };
+    virtual reg_t get_arrows(void) const { return 0x0F; };
 };
 
 class Cpu {
@@ -243,6 +256,7 @@ public:
 
     void load_rom(const std::string &name);
     void set_video(Video *video) { _video = video; };
+    void set_control(Controller *control) { _control = control; };
     void set_key(GBKey key, bool set);
     void toggle_debug(void) { _debug = !_debug; };
     void dump(void);
@@ -442,6 +456,9 @@ private:
 
     Video _null_video;
     Video *_video;
+
+    Controller _null_controller;
+    Controller *_control;
     reg_t _keys;
 
     // XXX: debug
