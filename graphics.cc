@@ -43,8 +43,10 @@ enum Color {
 
 unsigned global_palette[] = { Color0, Color1, Color2, Color3 };
 
-#define SCREEN_X 64
-#define SCREEN_Y 64
+#define SCREEN_POSX 64
+#define SCREEN_POSY 64
+#define SCREEN_H 144
+#define SCREEN_W 160
 
 static surface_ptr
 create_surface(short w, short h, bool alpha)
@@ -95,12 +97,27 @@ static void
 flip_vertical(SDL_Surface *surface)
 {
     unsigned *p = (unsigned *)surface->pixels;
-    for (int x = 0; x < surface->w; x++)
-        for (int y  = 0; y < surface->h / 2; y++) {
-            p[y * surface->w + x] ^= p[(surface->h - y - 1) * surface->w - x];
-            p[(surface->h - y - 1) * surface->w + x] ^= p[y * surface->w + x];
-            p[y * surface->w + x] ^= p[(surface->h - y - 1) * surface->w - x];
+    for (int y  = 0; y < surface->h / 2; y++) {
+        int y0 = y * surface->w;
+        int y1 = (surface->h - y - 1) * surface->w;
+        for (int x = 0; x < surface->w; x++) {
+            p[y0 + x] ^= p[y1 + x];
+            p[y1 + x] ^= p[y0 + x];
+            p[y0 + x] ^= p[y1 + x];
         }
+    }
+}
+
+static void
+blit_image(SDL_Surface *src, SDL_Rect *rect,
+           SDL_Surface *dest, short dX, short dY)
+{
+    SDL_Rect clip = {};
+
+    clip.x = dX;
+    clip.y = dY;
+
+    SDL_BlitSurface(src, rect, dest, &clip);
 }
 
 class TileMap {
@@ -169,7 +186,7 @@ class Sprite {
 
             unsigned palette[4];
 
-            if (bit_isset(_flags, 4))
+            if (bit_isset(_flags, OAMFlags::SpritePalette))
                 convert_palette(palette, ram[CtrlReg::OBP1], true);
             else
                 convert_palette(palette, ram[CtrlReg::OBP0], true);
@@ -177,17 +194,11 @@ class Sprite {
             // XXX: Handle transparency
 
             _idx = idx;
-            _rect.w = 8;
             if (bit_isset(lcdc, LCDCBits::OBJSize)) {
                 _pattern &= 0xFE;
-                _rect.h = 16;
-            } else {
-                _rect.h = 8;
-            }
-            _rect.x = SCREEN_X - 8 + _X;
-            _rect.y = SCREEN_Y - 16 + _Y;
-
-            _sprite = create_surface(_rect.w, _rect.h, true);
+                _sprite = create_surface(8, 16, true);
+            } else
+                _sprite = create_surface(8, 8, true);
 
             SDL_LockSurface(_sprite.get());
             unsigned *pixels = (unsigned *)_sprite->pixels;
@@ -196,30 +207,44 @@ class Sprite {
             const reg_t *data = &ram[Mem::ObjTiles];
             data += _pattern * 16;
             for (unsigned i = 0; i < 8; i++) {
-                convert_line(&pixels[i * _rect.w], *data++, *data++,
+                convert_line(&pixels[i * _sprite->w], *data++, *data++,
                     palette, false);
             }
 
             // Handle second block
             if (bit_isset(lcdc, LCDCBits::OBJSize)) {
                 for (unsigned i = 0; i < 8; i++)
-                    convert_line(&pixels[(i + 8) * _rect.w], *data++, *data++,
-                        palette, false);
+                    convert_line(&pixels[(i + 8) * _sprite->w],
+                        *data++, *data++, palette, false);
             }
-            if (bit_isset(_flags, 5))
+            if (bit_isset(_flags, OAMFlags::SpriteFlipX))
                 flip_horizontal(_sprite.get());
-            if (bit_isset(_flags, 6))
+            if (bit_isset(_flags, OAMFlags::SpriteFlipY))
                 flip_vertical(_sprite.get());
             SDL_UnlockSurface(_sprite.get());
         }
 
-        void blit(SDL_Surface *window)
+        void blit(SDL_Surface *screen)
         {
             if (!visible())
                 return;
 
-            // XXX: Clip the sprite to the window.
-            SDL_BlitSurface(_sprite.get(), NULL, window, &_rect);
+            if (bit_isset(_flags, OAMFlags::SpritePriority)) {
+                // Reverse the priority. We accomplish this by
+                // bliting the background over the sprite, then
+                // blitting it to the background.
+                // XXX: This still causes some glitches in Wario Land
+                SDL_Rect rect;
+                rect.x = _X - 7;
+                rect.y = _Y - 16;
+                rect.w = _sprite->w;
+                rect.h = _sprite->h;
+                SDL_SetColorKey(screen, SDL_SRCCOLORKEY,
+                    global_palette[0]);
+                blit_image(screen, &rect, _sprite.get(), 0, 0);
+                SDL_SetColorKey(screen, 0, 0);
+            }
+            blit_image(_sprite.get(), NULL, screen, _X - 7, _Y - 16);
         }
 
         bool visible(void) {
@@ -237,7 +262,6 @@ class Sprite {
         reg_t _pattern;
         reg_t _flags;
         surface_ptr _sprite;
-        SDL_Rect _rect;
         reg_t _idx;
 };
 
@@ -267,65 +291,59 @@ create_map(TileMap *tile_map, const reg_t *map)
 }
 
 static void
-blit_bg(SDL_Surface *window, SDL_Surface *bg, short scx, short scy)
+blit_bg(SDL_Surface *screen, SDL_Surface *bg, short scx, short scy)
 {
     // Blit the tiles on to the window
-    SDL_Rect clipped = { .x = scx, .y = scy, .h = 144, .w = 160 };
-    short x_overscan = 0;
-    short y_overscan = 0;
-    if (clipped.x + clipped.w > 256) {
-        x_overscan = clipped.x + clipped.w - 256;
-        clipped.w -= x_overscan;
-    }
-    if (clipped.y + clipped.h > 256) {
-        y_overscan = clipped.y + clipped.h - 256;
-        clipped.h -= y_overscan;
-    }
+    SDL_Rect rect = { .x = scx, .y = scy, .h = SCREEN_H, .w = SCREEN_W };
+    short y_overscan = (rect.y + rect.h) - bg->h;
+    short x_overscan = (rect.x + rect.w) - bg->w;
 
-    SDL_Rect window_rect = { .x = SCREEN_X, .y = SCREEN_Y };
-    SDL_BlitSurface(bg, &clipped, window, &window_rect);
+    if (y_overscan > 0)
+        rect.h -= y_overscan;
+    else
+        y_overscan = 0;
+    if (x_overscan > 0)
+        rect.w -= x_overscan;
+    else
+        x_overscan = 0;
+
+    blit_image(bg, &rect, screen, 0, 0);
 
     if (x_overscan > 0) {
-        window_rect.x += clipped.w;
-        window_rect.y = 64;
-        clipped.x = 0;
-        clipped.w = x_overscan;
-        SDL_BlitSurface(bg, &clipped, window, &window_rect);
+        rect.x = 0;
+        rect.y = scy;
+        rect.h = SCREEN_H;
+        rect.w = x_overscan;
 
-        if (y_overscan > 0) {
-            window_rect.y += clipped.y;
-            clipped.y = 0;
-            clipped.h = y_overscan;
-            SDL_BlitSurface(bg, &clipped, window, &window_rect);
-        }
+        blit_image(bg, &rect, screen, SCREEN_W - x_overscan, 0);
     }
 
     if (y_overscan > 0) {
-        window_rect.x = SCREEN_X;
-        window_rect.y = SCREEN_Y;
-        clipped.x = scx;
-        clipped.y = 0;
-        clipped.h = y_overscan;
-        clipped.w = 160 - x_overscan;
-        SDL_BlitSurface(bg, &clipped, window, &window_rect);
+        rect.x = scx;
+        rect.y = 0;
+        rect.h = y_overscan;
+        rect.w = SCREEN_W;
+
+        blit_image(bg, &rect, screen, 0, SCREEN_H - y_overscan);
     }
 
+    if (x_overscan > 0 && y_overscan > 0) {
+        rect.x = 0;
+        rect.y = 0;
+        rect.h = y_overscan;
+        rect.w = x_overscan;
+
+        blit_image(bg, &rect, screen, SCREEN_W - x_overscan,
+            SCREEN_H - y_overscan);
+    }
 }
 
 static void
-blit_window(SDL_Surface *window, SDL_Surface *win, short wx, short wy)
+blit_window(SDL_Surface *screen, SDL_Surface *win, short wx, short wy)
 {
-    if (wx <= 166 && wy <= 144) {
-        // XXX: Handle window offset better (wx < 7)
-        SDL_Rect clipped = {};
-        wx -= 7;
-        clipped.h = 144 - wy;
-        clipped.w = 160 - wx;
-        wx += SCREEN_X;
-        wy += SCREEN_Y;
-        SDL_Rect window_rect = { .x = wx, .y = wy };
-        SDL_BlitSurface(win, &clipped, window, &window_rect);
-    }
+    wx -= 7;
+    if (wx < SCREEN_W && wy < SCREEN_H)
+        blit_image(win, NULL, screen, wx, wy);
 }
 
 SDLDisplay::SDLDisplay(void)
@@ -358,6 +376,8 @@ SDLDisplay::render(const reg_t *ram)
     if (!bit_isset(lcdc, LCDCBits::LCDEnabled))
         return;
 
+    surface_ptr screen = create_surface(SCREEN_W, SCREEN_H, false);
+
     TileMap bg_tiles(ram[CtrlReg::BGP]);
     bg_tiles.init(&ram[0x8800], false);
     TileMap obj_tiles(ram[CtrlReg::BGP]);
@@ -375,7 +395,7 @@ SDLDisplay::render(const reg_t *ram)
         surface_ptr bg(create_map(tiles, map));
         short scx = ram[CtrlReg::SCX];
         short scy = ram[CtrlReg::SCY];
-        blit_bg(_window.get(), bg.get(), scx, scy);
+        blit_bg(screen.get(), bg.get(), scx, scy);
     }
 
     if (bit_isset(lcdc, LCDCBits::WindowDisplay)) {
@@ -384,7 +404,7 @@ SDLDisplay::render(const reg_t *ram)
         surface_ptr win(create_map(tiles, map));
         short wx = ram[CtrlReg::WX];
         short wy = ram[CtrlReg::WY];
-        blit_window(_window.get(), win.get(), wx, wy);
+        blit_window(screen.get(), win.get(), wx, wy);
     }
 
     const reg_t *oam = &ram[0xFE00];
@@ -396,7 +416,13 @@ SDLDisplay::render(const reg_t *ram)
 
     if (bit_isset(lcdc, LCDCBits::OBJDisplay))
         for (unsigned i = 40; i > 0; i--)
-            sprites[i-1].blit(_window.get());
+            sprites[i-1].blit(screen.get());
+
+    // Draw the window
+    {
+        SDL_Rect rect = { .x = SCREEN_POSX, .y = SCREEN_POSY };
+        SDL_BlitSurface(screen.get(), NULL, _window.get(), &rect);
+    }
 
     // Show the screen
     SDL_Flip(_window.get());

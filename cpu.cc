@@ -413,9 +413,6 @@ void Cpu::prefix_cb(void)
         _reset(dest, bit);
     } else if ((op & 0xC0) == 0xC0) {
         _set(dest, bit);
-    } else {
-        std::cout << "Unknown CB opcode: " << Print(op) << std::endl;
-        throw OpcodeException(op);
     }
 }
 
@@ -924,6 +921,7 @@ void Cpu::dispatch(void)
         OPCODE(0xFE, 8, 2, "CP d8", _cp(_rA, _d8()));
         OPCODE(0xFF, 16, 1, "RST 38H", _rst(0x38));
     default:
+        _state = State::Fault;
         std::cout << "Unknown opcode: " << Print(op) << std::endl;
         throw OpcodeException(op);
     }
@@ -942,6 +940,8 @@ void Cpu::step(void)
         break;
     case State::Stopped:
         // XXX: Should we disable the screen?
+        break;
+    case State::Fault:
         break;
     }
 
@@ -1227,9 +1227,9 @@ void Cpu::_read_rom(const std::string &name, bvec &rom)
 // 201 - 207
 #define H_BLANK_CYCLES 201
 // 77 - 83
-#define OAM_CYCLES (77 + H_BLANK_CYCLES)
+#define OAM_CYCLES 77
 // 169 - 175
-#define ACTIVE_CYCLES (169 + OAM_CYCLES)
+#define ACTIVE_CYCLES 169
 // 4560
 #define V_BLANK_CYCLES 4560
 
@@ -1284,41 +1284,46 @@ void Cpu::interrupt(void)
 void Cpu::video(void)
 {
     reg_t &stat = _mem[CtrlReg::STAT];
-    reg_t ly = _mem[CtrlReg::LY];
-    static unsigned start = 0;
+    reg_t &ly = _mem[CtrlReg::LY];
 
-    // See if we've moved scanlines
-    if (_fcycles > SCANLINE_CYCLES) {
-        _fcycles = 0;
-        ly = (ly + 1) % SCANLINES;
-        _write(CtrlReg::LY, ly);
+    switch (stat & 0x03) {
+    case LCDMode::HBlankMode:
+        if (_fcycles > H_BLANK_CYCLES) {
+            // Transition to VBlank or OAM
+            _fcycles -= H_BLANK_CYCLES;
 
-        switch (ly) {
-        case 0: {
-            unsigned end = clock();
-            start = end;
-            break;
+            ly = (ly + 1) % SCANLINES;
+            if (ly == DISPLAY_LINES) {
+                // Wait until our frame is finished
+                _video->render(&_mem[0]);
+                bit_set(_mem[CtrlReg::IF], Interrupt::VBlank, true);
+                stat = (stat & 0xfc) | LCDMode::VBlankMode;
+            } else {
+                stat = (stat & 0xfc) | LCDMode::OAMMode;
+            }
         }
-        case DISPLAY_LINES:
-            // Wait until our frame is finished
-            _video->render(&_mem[0]);
-            bit_set(_mem[CtrlReg::IF], Interrupt::VBlank, true);
-            break;
+        break;
+    case LCDMode::OAMMode:
+        if (_fcycles > OAM_CYCLES) {
+            // Transition to Active
+            _fcycles -= OAM_CYCLES;
+            stat = (stat & 0xfc) | LCDMode::ActiveMode;
         }
-    }
-
-    // Handle the LCD Status register
-    if (ly < DISPLAY_LINES) {
-        if (_fcycles < H_BLANK_CYCLES) {
-            stat = (stat & 0xfc) | 0x00;
-        } else if (_fcycles < OAM_CYCLES) {
-            stat = (stat & 0xfc) | 0x10;
-        } else if (_fcycles < ACTIVE_CYCLES) {
-            stat = (stat & 0xfc) | 0x11;
+        break;
+    case LCDMode::ActiveMode:
+        if (_fcycles > ACTIVE_CYCLES) {
+            // Transition to HBlank
+            _fcycles -= ACTIVE_CYCLES;
+            stat = (stat & 0xfc) | LCDMode::HBlankMode;
         }
-    } else {
-        // We're in vblank
-        stat = (stat & 0xfc) | 0x01;
+        break;
+    case LCDMode::VBlankMode:
+        if (_fcycles > V_BLANK_CYCLES) {
+            // Transition to OAM
+            _fcycles -= V_BLANK_CYCLES;
+            stat = (stat & 0xfc) | LCDMode::OAMMode;
+        }
+        break;
     }
 }
 

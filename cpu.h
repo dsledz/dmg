@@ -110,6 +110,7 @@ enum class State {
     Running = 0,
     Halted = 1,
     Stopped = 2,
+    Fault = 3,
 };
 
 enum class Register {
@@ -495,6 +496,30 @@ enum LCDCBits {
     WindowDisplay = 5,
     WindowTileMap = 6,
     LCDEnabled = 7,
+};
+
+enum OAMFlags {
+    SpritePalette = 4,
+    SpriteFlipX = 5,
+    SpriteFlipY = 6,
+    SpritePriority = 7,
+};
+
+enum LCDMode {
+    HBlankMode  = 0,
+    VBlankMode  = 1,
+    OAMMode     = 2,
+    ActiveMode  = 3,
+};
+
+enum STATBits {
+    LYCInterrupt = 6,
+    Mode10Int    = 5,
+    Mode01Int    = 4,
+    Mode00Int    = 3,
+    Coincidence  = 2,
+    LCDModeBit1  = 1,
+    LCDModeBit0  = 0
 };
 
 };
