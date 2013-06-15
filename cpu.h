@@ -65,7 +65,7 @@ static inline void bit_set(reg_t &reg, unsigned n, bool val)
     reg |= (val ? (1 << n) : 0);
 }
 
-static inline bool bit_isset(reg_t reg, unsigned n)
+static inline bool bit_isset(wreg_t reg, unsigned n)
 {
     return (reg & (1 << n));
 }
@@ -329,6 +329,8 @@ protected:
     void _cpl(void);
     void _ccf(void);
     void _scf(void);
+    void _ldhlsp(sreg_t value);
+    void _addsp(sreg_t value);
 
     void _stop(void);
     void _halt(void);
@@ -371,12 +373,12 @@ protected:
         _PC++;
         return tmp;
     }
-    inline sreg_t _r8(void) {
+    inline reg_t _r8(void) {
         reg_t tmp = _mem[_PC];
         if (_debug)
             std::cout << " r(" << Print(tmp) << ")";
         _PC++;
-        return static_cast<sreg_t>(tmp);
+        return tmp;
     }
     inline wreg_t _a8(void) {
         wreg_t tmp = _mem[_PC] + 0xff00;

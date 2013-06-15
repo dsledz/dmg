@@ -263,6 +263,35 @@ TEST(DMGOpcodes, ldd_loop)
     cpu.test_step(0x2000 * 3 + 3);
 }
 
+TEST(DMGOpcodes, add_sp)
+{
+    Cpu cpu;
+    cpu.set(Register::SP, 0x8000);
+    cpu.load(0xE8, 0xFF);
+
+    Cpu expect = cpu;
+    expect.set(Register::SP, 0x7fff);
+    expect.set(Register::F, 0x00);
+
+    cpu.test_step(1);
+
+    EXPECT_EQ(expect, cpu);
+}
+
+TEST(DMGOpcodes, add_sp2)
+{
+    Cpu cpu;
+    cpu.set(Register::SP, 0xffff);
+    cpu.load(0xE8, 0x01);
+
+    Cpu expect = cpu;
+    expect.set(Register::SP, 0x0000);
+    expect.set(Register::F, 0x30);
+
+    cpu.test_step(1);
+
+    EXPECT_EQ(expect, cpu);
+}
 TEST(DMGOpcodes, ld_a_de)
 {
     Cpu cpu;
@@ -332,7 +361,7 @@ TEST(DMGOpcodes, daa)
     Cpu expect = cpu;
 
     expect.set(Register::A, 0x10);
-    expect.set(Register::F, 0x30);
+    expect.set(Register::F, 0x10);
 
     cpu.test_step(2);
     EXPECT_EQ(expect, cpu);

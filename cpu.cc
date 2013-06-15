@@ -179,9 +179,10 @@ void Cpu::_adc(Register reg, reg_t value)
 
 void Cpu::_sub(Register reg, reg_t value)
 {
-    _flags.C = (value > _fetch(reg)) ? true : false;
-    _flags.H = ((value & 0x0f) > (_fetch(reg) & 0x0f)) ? true : false;
-    value = _fetch(reg) - value;
+    reg_t orig = _fetch(reg);
+    _flags.C = (value > orig) ? true : false;
+    _flags.H = ((value & 0x0f) > (orig & 0x0f)) ? true : false;
+    value = orig - value;
     _flags.Z = (value == 0);
 
     _store(reg, value);
@@ -573,6 +574,32 @@ void Cpu::_addw(Register reg, wreg_t value)
     _storew(reg, res);
 }
 
+void Cpu::_addsp(sreg_t value)
+{
+    wreg_t orig = _fetchw(Register::SP);
+    wreg_t res = orig + value;
+
+    _flags.C = bit_isset(orig ^ res ^ value, 8);
+    _flags.H = bit_isset(orig ^ res ^ value, 4);
+    _flags.Z = 0;
+    _flags.N = 0;
+
+    _storew(Register::SP, res);
+}
+
+void Cpu::_ldhlsp(sreg_t value)
+{
+    wreg_t orig = _fetchw(Register::SP);
+    wreg_t res = orig + value;
+
+    _flags.C = bit_isset(orig ^ res ^ value, 8);
+    _flags.H = bit_isset(orig ^ res ^ value, 4);
+    _flags.Z = 0;
+    _flags.N = 0;
+
+    _storew(Register::HL, res);
+}
+
 void Cpu::_incw(Register reg)
 {
     wreg_t value = _fetchw(reg) + 1;
@@ -607,13 +634,16 @@ void Cpu::_ldi(addr_t addr, Register reg)
 {
     if (_debug)
         std::cout << " -> " << Print(addr);
-    switch (reg) {
-    case Register::SP:
-        _write(addr, _SPl);
-        _write(addr+1, _SPh);
-    default:
-        _write(addr, _fetch(reg));
-    }
+    _write(addr, _fetch(reg));
+}
+
+void Cpu::_ldwi(addr_t addr, Register reg)
+{
+    wreg_t value = _fetchw(reg);
+    if (_debug)
+        std::cout << " -> " << Print(addr) << " <- " << Print(value);
+    _write(addr, value & 0xff);
+    _write(addr+1, value >> 8);
 }
 
 void Cpu::_cpl(void)
@@ -641,46 +671,20 @@ void Cpu::_scf(void)
 
 void Cpu::_daa(void)
 {
-    reg_t value = _fetch(Register::A);
-    reg_t l = value & 0xf;
-    reg_t h = (value & 0xf0) >> 4;
-    reg_t add = 0;
+    wreg_t value = _fetch(Register::A);
+
     if (!_flags.N) {
-        if (!_flags.C && h <= 9 && !_flags.H && l <= 9)
-            add = 0x00;
-        else if (!_flags.C && h <=8 && !_flags.H && l > 9)
-            add = 0x06;
-        else if (!_flags.C && h <=9 && _flags.H && l <= 3)
-            add = 0x06;
-        else if (!_flags.C && h > 9 && !_flags.H && l <= 9)
-            add = 0x60;
-        else if (!_flags.C && h >=9 && !_flags.H && l > 9)
-            add = 0x66;
-        else if (!_flags.C && h > 9 && _flags.H && l <= 3)
-            add = 0x66;
-        else if (_flags.C && h < 3 && !_flags.H && l <= 9)
-            add = 0x60;
-        else if (_flags.C && h < 3 && !_flags.H && l > 9)
-            add = 0x66;
-        else if (_flags.C && h <=3 && _flags.H && l <= 3)
-            add = 0x66;
-        _flags.C = (add >= 0x60);
+        if (_flags.H || (value & 0x0f) > 9) value += 0x06;
+        if (_flags.C || value > 0x9f) value += 0x60;
     } else {
-        if (!_flags.C && h <= 9 && !_flags.H && l <= 9) {
-            add = 0x00;
-            _flags.C = 0;
-        } else if (!_flags.C && h < 9 && _flags.H && l >= 6) {
-            add = 0xFA;
-            _flags.C = 0;
-        } else if (_flags.C && h >=7 && !_flags.H && l <= 9) {
-            add = 0xA0;
-            _flags.C = 1;
-        } else if (_flags.C && (h == 6 || h == 7) && _flags.H && l >=6) {
-            add = 0x9A;
-            _flags.C = 1;
-        }
+        if (_flags.H) value = (value - 6) & 0xff;
+        if (_flags.C) value -= 0x60;
     }
-    _add(Register::A, add);
+
+    _flags.C = (value & 0x100) != 0;
+    _flags.H = 0;
+    _flags.Z = (value & 0xFF) == 0;
+    _store(Register::A, value);
 }
 
 #define OPCODE(op, cycles, bytes, name, func) \
@@ -712,7 +716,7 @@ void Cpu::dispatch(void)
         OPCODE(0x05, 4, 1, "DEC B", _dec(Register::B));
         OPCODE(0x06, 8, 2, "LD B,d8", _ld(Register::B, _d8()));
         OPCODE(0x07, 4, 1, "RLCA", _rlca());
-        OPCODE(0x08, 20, 3, "LD (a16), SP", _ldi(_d16(), Register::SP));
+        OPCODE(0x08, 20, 3, "LD (a16), SP", _ldwi(_d16(), Register::SP));
         OPCODE(0x09, 8, 1, "ADD HL,BC", _addw(Register::HL, _BC));
         OPCODE(0x0A, 8, 1, "LD A,(BC)", _ld(Register::A, _fetch(Register::BC)));
         OPCODE(0x0B, 8, 1, "DEC BC", _decw(Register::BC));
@@ -931,7 +935,7 @@ void Cpu::dispatch(void)
         OPCODE(0xE5, 16, 1, "PUSH HL", _push(_H, _L));
         OPCODE(0xE6, 8, 2, "AND d8", _and(Register::A, _d8()));
         OPCODE(0xE7, 16, 1, "RST 20H", _rst(0x20));
-        OPCODE(0xE8, 16, 2, "ADD SP, r8", _ldw(Register::SP, _SP + _r8()));
+        OPCODE(0xE8, 16, 2, "ADD SP, r8", _addsp(_r8()));
         OPCODE(0xE9, 4, 1, "JP (HL)", _jp(true, _HL));
         OPCODE(0xEA, 16, 3, "LD (a16),A", _ldi(_d16(), Register::A));
         OPCODE(0xEE, 16, 1, "XOR d8", _xor(Register::A, _d8()));
@@ -943,7 +947,7 @@ void Cpu::dispatch(void)
         OPCODE(0xF5, 16, 1, "PUSH AF", _push(_A, _F));
         OPCODE(0xF6, 8, 2, "OR d8", _or(Register::A, _d8()));
         OPCODE(0xF7, 16, 1, "RST 30H", _rst(0x30));
-        OPCODE(0xF8, 12, 2, "LD HL,SP+r8", _ldw(Register::HL, _SP + _r8()));
+        OPCODE(0xF8, 12, 2, "LD HL,SP+r8", _ldhlsp(_r8()));
         OPCODE(0xF9, 8, 1, "LD SP,HL", _ldw(Register::SP, _HL));
         OPCODE(0xFa, 16, 3, "LD A,(a16)", _ld(Register::A, _mem[_d16()]));
         OPCODE(0xFB, 4, 1, "EI", _ime = IME::Shadow;);
