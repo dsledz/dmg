@@ -284,45 +284,44 @@ protected:
     void timer();
 
     /* Addition */
-    void _add(Register reg, reg_t value);
-    void _addw(Register reg, wreg_t value);
-    void _adc(Register reg, reg_t value);
-    void _inc(Register reg);
-    void _incw(Register reg);
+    void _add(reg_t &orig, reg_t value);
+    void _adc(reg_t &orig, reg_t value);
+    void _addw(wreg_t &worig, wreg_t value);
+    void _inc(reg_t &orig);
+    void _incw(wreg_t &worig);
 
     /* Subtraction */
-    void _sub(Register reg, reg_t value);
-    void _subw(Register reg, wreg_t value);
-    void _sbc(Register reg, reg_t value);
-    void _dec(Register reg);
-    void _decw(Register reg);
+    void _sub(reg_t &orig, reg_t value);
+    void _subw(wreg_t &worig, wreg_t value);
+    void _sbc(reg_t &orig, reg_t value);
+    void _dec(reg_t &orig);
+    void _decw(wreg_t &worig);
 
     /* Load */
-    void _ld(Register reg, reg_t value);
-    void _ldw(Register reg, wreg_t value);
-    void _ldi(addr_t addr, Register reg);
+    void _ld(reg_t &orig, reg_t value);
+    void _ldw(wreg_t &worig, wreg_t value);
     void _ldi(addr_t addr, reg_t value);
-    void _ldwi(addr_t addr, Register reg);
+    void _ldwi(addr_t addr, wreg_t value);
 
     /* Bitwise ops */
-    void _and(Register reg, reg_t value);
-    void _xor(Register reg, reg_t value);
-    void _or(Register reg, reg_t value);
-    void _bit(Register reg, int bit);
-    void _res(Register reg, int bit);
-    void _set(Register reg, int bit);
-    void _swap(Register reg);
-    void _rl(Register reg);
+    void _and(reg_t &orig, reg_t value);
+    void _xor(reg_t &orig, reg_t value);
+    void _or(reg_t &orig, reg_t value);
+    void _bit(reg_t &orig, int bit);
+    void _reset(reg_t &orig, int bit);
+    void _set(reg_t &orig, int bit);
+    void _swap(reg_t &orig);
+    void _rl(reg_t &orig);
     void _rla(void);
-    void _rlc(Register reg);
+    void _rlc(reg_t &orig);
     void _rlca(void);
-    void _rr(Register reg);
+    void _rr(reg_t &orig);
     void _rra(void);
-    void _rrc(Register reg);
+    void _rrc(reg_t &orig);
     void _rrca(void);
-    void _sla(Register reg);
-    void _sra(Register reg);
-    void _srl(Register reg);
+    void _sla(reg_t &orig);
+    void _sra(reg_t &orig);
+    void _srl(reg_t &orig);
 
     void _cp(reg_t lhs, reg_t rhs);
     void _daa(void);
@@ -346,45 +345,58 @@ protected:
     void _pop(wreg_t &reg);
 
     /* Store/Load */
-    reg_t _store(Register reg, reg_t value);
-    wreg_t _storew(Register reg, wreg_t value);
-    reg_t _fetch(Register reg);
-    wreg_t _fetchw(Register reg);
+    reg_t &_fetch(Register reg);
+    wreg_t &_fetchw(Register reg);
     void _write(addr_t addr, reg_t value);
+    reg_t &_read(addr_t addr) {
+        return _mem[addr];
+    }
     inline void _tick(unsigned cycles) {
         _cycles += cycles;
         _fcycles += cycles;
         _dcycles += cycles;
         _tcycles += cycles;
     }
+    inline void _set_hflag(wreg_t orig, wreg_t arg, wreg_t result) {
+        _flags.H = bit_isset(orig ^ arg ^ result, 4);
+    }
+    inline void _set_cflag(wreg_t orig, wreg_t arg, wreg_t result) {
+        _flags.C = bit_isset(orig ^ arg ^ result, 8);
+    }
+    inline void _set_zflag(wreg_t result) {
+        _flags.Z = (result & 0xff) == 0;
+    }
+    inline void _set_nflag(bool neg) {
+        _flags.N = neg;
+    }
 
     /* decode accessors */
     inline wreg_t _d16(void) {
-        wreg_t tmp = _mem[_PC] | (_mem[_PC+1] << 8);
+        wreg_t tmp = _mem[_rPC] | (_mem[_rPC+1] << 8);
         if (_debug)
             std::cout << " d(" << Print(tmp) << ")";
-        _PC+=2;
+        _rPC+=2;
         return tmp;
     }
     inline reg_t _d8(void) {
-        reg_t tmp = _mem[_PC];
+        reg_t tmp = _mem[_rPC];
         if (_debug)
             std::cout << " d(" << Print(tmp) << ")";
-        _PC++;
+        _rPC++;
         return tmp;
     }
     inline reg_t _r8(void) {
-        reg_t tmp = _mem[_PC];
+        reg_t tmp = _mem[_rPC];
         if (_debug)
             std::cout << " r(" << Print(tmp) << ")";
-        _PC++;
+        _rPC++;
         return tmp;
     }
     inline wreg_t _a8(void) {
-        wreg_t tmp = _mem[_PC] + 0xff00;
+        wreg_t tmp = _mem[_rPC] + 0xff00;
         if (_debug)
             std::cout << " a(" << Print(tmp) << ")";
-        _PC++;
+        _rPC++;
         return tmp;
     }
 
@@ -404,46 +416,46 @@ private:
                     reg_t N:1;
                     reg_t Z:1;
                 } _flags;
-                reg_t _F;
+                reg_t _rF;
             };
-            reg_t _A;
+            reg_t _rA;
         };
-        wreg_t _AF;
+        wreg_t _rAF;
     };
     union {
         struct {
-            reg_t _C;
-            reg_t _B;
+            reg_t _rC;
+            reg_t _rB;
         };
-        wreg_t _BC;
+        wreg_t _rBC;
     };
     union {
         struct {
-            reg_t _E;
-            reg_t _D;
+            reg_t _rE;
+            reg_t _rD;
         };
-        wreg_t _DE;
+        wreg_t _rDE;
     };
     union {
         struct {
-            reg_t _L;
-            reg_t _H;
+            reg_t _rL;
+            reg_t _rH;
         };
-        wreg_t _HL;
+        wreg_t _rHL;
     };
     union {
         struct {
-            reg_t _SPl;
-            reg_t _SPh;
+            reg_t _rSPl;
+            reg_t _rSPh;
         };
-        wreg_t _SP;
+        wreg_t _rSP;
     };
     union {
         struct {
-            reg_t _PCl;
-            reg_t _PCh;
+            reg_t _rPCl;
+            reg_t _rPCh;
         };
-        wreg_t _PC;
+        wreg_t _rPC;
     };
 
     IME _ime;

@@ -40,7 +40,7 @@ using namespace DMG;
 #define DEFAULT_ROM (32*1024)
 #define MEM_SIZE (64*1024)
 
-Cpu::Cpu(void): _AF(0), _BC(0), _DE(0), _HL(0), _SP(0), _PC(0),
+Cpu::Cpu(void): _rAF(0), _rBC(0), _rDE(0), _rHL(0), _rSP(0), _rPC(0),
     _ime(IME::Disabled), _state(State::Running),
     _cycles(0), _fcycles(0), _dcycles(0), _tcycles(0),
     _video(&_null_video), _control(&_null_controller), _debug(false)
@@ -53,14 +53,14 @@ Cpu::~Cpu(void)
 {
 }
 
-#ifdef EQUAL_FAST
+#ifdef EQUAL_rFAST
 bool Cpu::operator ==(const Cpu &rhs) const
 {
-    return _A == rhs._A && _F == rhs._F &&
-        _B == rhs._B && _C == rhs._C &&
-        _D == rhs._D && _E == rhs._E &&
-        _H == rhs._H && _L == rhs._L &&
-        _SP == rhs._SP && _PC == rhs._PC &&
+    return _rA == rhs._rA && _rF == rhs._rF &&
+        _rB == rhs._rB && _rC == rhs._rC &&
+        _rD == rhs._rD && _rE == rhs._rE &&
+        _rH == rhs._rH && _rL == rhs._rL &&
+        _rSP == rhs._rSP && _rPC == rhs._rPC &&
         _flags.Z == rhs._flags.Z && _flags.C == rhs._flags.C &&
         _mem == rhs._mem;
 }
@@ -74,18 +74,16 @@ bool Cpu::operator ==(const Cpu &rhs) const
 
 bool Cpu::operator == (const Cpu &rhs) const
 {
-    EQ(_A, rhs._A);
-    EQ(_F, rhs._F);
-    EQ(_B, rhs._B);
-    EQ(_C, rhs._C);
-    EQ(_D, rhs._D);
-    EQ(_E, rhs._E);
-    EQ(_H, rhs._H);
-    EQ(_L, rhs._L);
-    EQ(_SP, rhs._SP);
-    EQ(_PC, rhs._PC);
-    EQ(_flags.Z, rhs._flags.Z);
-    EQ(_flags.C, rhs._flags.C);
+    EQ(_rA, rhs._rA);
+    EQ(_rF, rhs._rF);
+    EQ(_rB, rhs._rB);
+    EQ(_rC, rhs._rC);
+    EQ(_rD, rhs._rD);
+    EQ(_rE, rhs._rE);
+    EQ(_rH, rhs._rH);
+    EQ(_rL, rhs._rL);
+    EQ(_rSP, rhs._rSP);
+    EQ(_rPC, rhs._rPC);
     for (unsigned i = 0; i < _mem.size(); i++)
         if (_mem[i] != rhs._mem[i]) {
             std::cout << "Memory differences at: " << Print(i) << std::endl;
@@ -104,359 +102,343 @@ bool Cpu::operator == (const Cpu &rhs) const
  *      |_|
  */
 
-reg_t Cpu::_store(Register reg, reg_t value)
-{
-    if (_debug)
-        std::cout << "  <- " << Print(value);
-
-    switch (reg) {
-    case Register::A: _A = value; break;
-    case Register::B: _B = value; break;
-    case Register::C: _C = value; break;
-    case Register::D: _D = value; break;
-    case Register::E: _E = value; break;
-    case Register::H: _H = value; break;
-    case Register::L: _L = value; break;
-    case Register::HL: _write(_HL, value); break;
-    case Register::SP: _write(_SP, value); break;
-    default: throw CpuException();
-    }
-    return value;
-}
-
-reg_t Cpu::_fetch(Register reg)
+reg_t &Cpu::_fetch(Register reg)
 {
     switch (reg) {
-        case Register::A: return _A;
-        case Register::B: return _B;
-        case Register::C: return _C;
-        case Register::D: return _D;
-        case Register::E: return _E;
-        case Register::H: return _H;
-        case Register::L: return _L;
-        case Register::BC: return _mem[_BC];
-        case Register::DE: return _mem[_DE];
-        case Register::HL: return _mem[_HL];
-        case Register::SP: return _mem[_SP];
+        case Register::A: return _rA;
+        case Register::B: return _rB;
+        case Register::C: return _rC;
+        case Register::D: return _rD;
+        case Register::E: return _rE;
+        case Register::H: return _rH;
+        case Register::L: return _rL;
+        case Register::HL: return _mem[_rHL];
         default: throw CpuException();
     }
     throw CpuException();
 }
 
-void Cpu::_add(Register reg, reg_t value)
+void Cpu::_add(reg_t &dest, reg_t arg)
 {
-    reg_t lhs = _fetch(reg);
-    wreg_t res = lhs + value;
-    _flags.C = (res > 255) ? true : false;
-    _flags.H = ((lhs & 0x0f) + (value & 0x0f) > 0x0f) ? true : false;
-    _flags.N = false;
-    _flags.Z = (res & 0xff) == 0;
+    wreg_t result = dest + arg;
 
-    _store(reg, res);
+    _set_hflag(dest, arg, result);
+    _set_cflag(dest, arg, result);
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
-void Cpu::_inc(Register reg)
+void Cpu::_inc(reg_t &dest)
 {
-    reg_t value = _fetch(reg) + 1;
-    _flags.Z = (value == 0);
-    _flags.H = (value & 0xf) == 0x00;
-    _flags.N = false;
+    wreg_t result = dest + 1;
 
-    _store(reg, value);
+    _set_hflag(dest, 1, result);
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
-void Cpu::_adc(Register reg, reg_t value)
+void Cpu::_adc(reg_t &dest, reg_t arg)
 {
-    reg_t lhs = _fetch(reg);
-    wreg_t res = lhs + value + _flags.C;
-    _flags.H = ((lhs & 0x0f) + (value & 0x0f) + _flags.C > 0x0f) ? true : false;
-    _flags.C = (res > 255) ? true : false;
-    _flags.N = false;
-    _flags.Z = (res & 0xff) == 0;
+    wreg_t result = dest + arg + _flags.C;
 
-    _store(reg, res);
+    _set_hflag(dest, arg, result);
+    _set_cflag(dest, arg, result);
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
-void Cpu::_sub(Register reg, reg_t value)
+void Cpu::_sub(reg_t &dest, reg_t arg)
 {
-    reg_t orig = _fetch(reg);
-    _flags.C = (value > orig) ? true : false;
-    _flags.H = ((value & 0x0f) > (orig & 0x0f)) ? true : false;
-    value = orig - value;
-    _flags.Z = (value == 0);
+    wreg_t result = dest - arg;
 
-    _store(reg, value);
-    _flags.N = true;
+    _set_hflag(dest, arg, result);
+    _set_cflag(dest, arg, result);
+    _set_zflag(result);
+    _set_nflag(true);
+
+    dest = result;
 }
 
-void Cpu::_dec(Register reg)
+void Cpu::_dec(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    _flags.H = (value & 0x0f) == 0;
-    _flags.Z = (value == 1);
+    reg_t result = dest - 1;
 
-    value -= 1;
-    _store(reg, value);
-    _flags.N = true;
+    _set_hflag(dest, 1, result);
+    _set_zflag(result);
+    _set_nflag(true);
+
+    dest = result;
 }
 
-void Cpu::_sbc(Register reg, reg_t value)
+void Cpu::_sbc(reg_t &dest, reg_t arg)
 {
     reg_t carry = _flags.C;
-    _flags.C = (value > _fetch(reg) - carry) ? true : false;
-    _flags.H = ((value & 0x0f) + carry > (_fetch(reg) & 0x0f)) ? true : false;
-    value = _fetch(reg) - value - carry;
-    _flags.Z = (value == 0);
+    reg_t result = dest - arg - carry;
 
-    _store(reg, value);
-    _flags.N = true;
+    _flags.C = (arg > dest - carry) ? true : false;
+    _flags.H = ((arg & 0x0f) + carry > (dest & 0x0f)) ? true : false;
+    _set_zflag(result);
+    _set_nflag(true);
 
+    dest = result;
 }
 
-void Cpu::_cp(reg_t lhs, reg_t rhs)
+void Cpu::_cp(reg_t dest, reg_t arg)
 {
     if (_debug)
-        std::cout << "   " << Print(lhs) << "<->" << Print(rhs);
+        std::cout << "   " << Print(dest) << "<->" << Print(arg);
 
-    _flags.Z = (lhs == rhs);
-    _flags.C = (rhs > lhs);
-    _flags.H = ((rhs & 0x0f) > (lhs & 0x0f)) ? true : false;
-    _flags.N = true;
+    _flags.Z = (dest == arg);
+    _flags.C = (arg > dest);
+    _flags.H = ((arg & 0x0f) > (dest & 0x0f)) ? true : false;
+    _flags.N = 1;
 }
 
-void Cpu::_and(Register reg, reg_t value)
+void Cpu::_and(reg_t &dest, reg_t arg)
 {
-    value = _fetch(reg) & value;
-    _flags.Z = (value == 0);
+    reg_t result = dest & arg;
+
     _flags.C = 0;
     _flags.H = 1;
-    _flags.N = 0;
+    _set_zflag(result);
+    _set_nflag(false);
 
-    _store(reg, value);
+    dest = result;
 }
 
-void Cpu::_xor(Register reg, reg_t value)
+void Cpu::_xor(reg_t &dest, reg_t arg)
 {
-    value = _fetch(reg) ^ value;
-    _flags.Z = (value == 0);
+    reg_t result = dest ^ arg;
+
     _flags.C = 0;
     _flags.H = 0;
-    _flags.N = 0;
+    _set_zflag(result);
+    _set_nflag(false);
 
-    _store(reg, value);
+    dest = result;
 }
 
-void Cpu::_or(Register reg, reg_t value)
+void Cpu::_or(reg_t &dest, reg_t arg)
 {
-    value = _fetch(reg) | value;
-    _flags.Z = (value == 0);
+    reg_t result = dest | arg;
+
     _flags.C = 0;
     _flags.H = 0;
-    _flags.N = 0;
+    _set_zflag(result);
+    _set_nflag(false);
 
-    _store(reg, value);
+    dest = result;
 }
 
-void Cpu::_ld(Register reg, reg_t value)
+void Cpu::_ld(reg_t &dest, reg_t arg)
 {
-    _store(reg, value);
+    reg_t result = arg;
+
+    dest = result;
 }
 
-void Cpu::_bit(Register reg, int bit)
+void Cpu::_bit(reg_t &dest, int bit)
 {
-    _flags.Z = (_fetch(reg) & (1 << bit)) == 0;
-    _flags.N = 0;
+    reg_t result = dest & (1 << bit);
+
     _flags.H = 1;
+    _set_zflag(result);
+    _set_nflag(false);
 }
 
-void Cpu::_res(Register reg, int bit)
+void Cpu::_reset(reg_t &dest, int bit)
 {
-    _store(reg, _fetch(reg) & ~(1 << bit));
+    reg_t result = dest & ~(1 << bit);
+
+    dest = result;
 }
 
-void Cpu::_set(Register reg, int bit)
+void Cpu::_set(reg_t &dest, int bit)
 {
-    _store(reg, _fetch(reg) | (1 << bit));
+    reg_t result = dest | (1 << bit);
+
+    dest = result;
 }
 
-void Cpu::_rl(Register reg)
+void Cpu::_rl(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    reg_t carry = _flags.C;
-    _flags.C = (value & 0x80) != 0;
-    value = (value << 1) | carry;
-    _flags.Z = (value == 0);
-    _flags.N = 0;
+    reg_t result = (dest << 1) | _flags.C;
+
+    _flags.C = (dest & 0x80) != 0;
     _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
 
-    _store(reg, value);
+    dest = result;
 }
 
 void Cpu::_rla(void)
 {
-    _rl(Register::A);
+    _rl(_rA);
     _flags.Z = 0;
 }
 
-void Cpu::_rlc(Register reg)
+void Cpu::_rlc(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    _flags.C = (value & 0x80) != 0;
-    value = (value << 1) | _flags.C;
-    _flags.Z = (value == 0);
-    _flags.N = 0;
-    _flags.H = 0;
+    reg_t result = (dest << 1) | ((dest & 0x80) >> 7);
 
-    _store(reg, value);
+    _flags.C = (dest & 0x80) != 0;
+    _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
 void Cpu::_rlca(void)
 {
-    _rlc(Register::A);
+    _rlc(_rA);
     _flags.Z = 0;
 }
 
-void Cpu::_rr(Register reg)
+void Cpu::_rr(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    reg_t carry = (_flags.C ? 0x80 : 0x00);
-    _flags.C = (value & 0x01);
-    value = (value >> 1) | carry;
-    _flags.Z = (value == 0);
-    _flags.N = 0;
-    _flags.H = 0;
+    reg_t result = (dest >> 1) | (_flags.C ? 0x80 : 0x00);
 
-    _store(reg, value);
+    _flags.C = (dest & 0x01) != 0;
+    _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
 void Cpu::_rra(void)
 {
-    _rr(Register::A);
+    _rr(_rA);
     _flags.Z = 0;
 }
 
-void Cpu::_rrc(Register reg)
+void Cpu::_rrc(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    _flags.C = (value & 0x01);
-    reg_t carry = (_flags.C ? 0x80 : 0x00);
-    value = (value >> 1) | carry;
-    _flags.Z = (value == 0);
-    _flags.N = false;
-    _flags.H = false;
+    reg_t result = (dest >> 1) | (dest & 0x01 ? 0x80 : 0x00);
 
-    _store(reg, value);
+    _flags.C = (dest & 0x01) != 0;
+    _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
 void Cpu::_rrca(void)
 {
-    _rrc(Register::A);
+    _rrc(_rA);
     _flags.Z = 0;
 }
 
-void Cpu::_sla(Register reg)
+void Cpu::_sla(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    _flags.C = (value & 0x80) != 0;
-    value = (value << 1);
-    _flags.Z = (value == 0);
-    _flags.N = false;
-    _flags.H = false;
+    reg_t result = (dest << 1);
 
-    _store(reg, value);
+    _flags.C = (dest & 0x80) != 0;
+    _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
-void Cpu::_sra(Register reg)
+void Cpu::_sra(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    _flags.C = (value & 0x01);
-    reg_t carry = value & 0x80;
-    value = (value >> 1) | carry;
-    _flags.Z = (value == 0);
-    _flags.N = false;
-    _flags.H = false;
+    reg_t result = (dest >> 1) | (dest & 0x80);
 
-    _store(reg, value);
+    _flags.C = (dest & 0x01) != 0;
+    _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
-void Cpu::_srl(Register reg)
+void Cpu::_srl(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    _flags.C = (value & 0x01);
-    value = (value >> 1);
-    _flags.Z = (value == 0);
-    _flags.N = false;
-    _flags.H = false;
+    reg_t result = (dest >> 1);
 
-    _store(reg, value);
+    _flags.C = (dest & 0x01) != 0;
+    _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
+
+    dest = result;
 }
 
-void Cpu::_swap(Register reg)
+void Cpu::_swap(reg_t &dest)
 {
-    reg_t value = _fetch(reg);
-    value = (value >> 4) | (value << 4);
+    reg_t result = (dest >> 4) | (dest << 4);
 
-    _flags.Z = (value == 0);
     _flags.C = 0;
-    _flags.N = false;
-    _flags.H = false;
+    _flags.H = 0;
+    _set_zflag(result);
+    _set_nflag(false);
 
-    _store(reg, value);
+    dest = result;
 }
 
 void Cpu::prefix_cb(void)
 {
     reg_t op = _d8();
     int bit = (op & 0x38) >> 3;
-    Register reg = Register(op & 0x7);
+    reg_t &dest = _fetch(Register(op & 0x7));
     if ((op & 0xF8) == 0x00) {
-        _rlc(reg);
+        _rlc(dest);
     } else if ((op & 0xF8) == 0x08) {
-        _rrc(reg);
+        _rrc(dest);
     } else if ((op & 0xF8) == 0x10) {
-        _rl(reg);
+        _rl(dest);
     } else if ((op & 0xF8) == 0x18) {
-        _rr(reg);
+        _rr(dest);
     } else if ((op & 0xF8) == 0x20) {
-        _sla(reg);
+        _sla(dest);
     } else if ((op & 0xF8) == 0x28) {
-        _sra(reg);
+        _sra(dest);
     } else if ((op & 0xF8) == 0x30) {
-        _swap(reg);
+        _swap(dest);
     } else if ((op & 0xF8) == 0x38) {
-        _srl(reg);
+        _srl(dest);
     } else if ((op & 0xC0) == 0x40) {
-        _bit(reg, bit);
+        _bit(dest, bit);
     } else if ((op & 0xC0) == 0x80) {
-        _res(reg, bit);
+        _reset(dest, bit);
     } else if ((op & 0xC0) == 0xC0) {
-        _set(reg, bit);
+        _set(dest, bit);
     } else {
         std::cout << "Unknown CB opcode: " << Print(op) << std::endl;
         throw OpcodeException(op);
     }
 }
 
-void Cpu::_rst(reg_t value)
+void Cpu::_rst(reg_t arg)
 {
-    _push(_PCh, _PCl);
-    _PC = value;
+    _push(_rPCh, _rPCl);
+    _rPC = arg;
 }
 
-void Cpu::_jr(bool jump, sreg_t value)
+void Cpu::_jr(bool jump, sreg_t arg)
 {
     if (jump) {
-        _PC += (char)value;
+        _rPC += (char)arg;
         _tick(4);
     }
 }
 
-void Cpu::_jp(bool jump, wreg_t value)
+void Cpu::_jp(bool jump, wreg_t arg)
 {
     if (jump) {
         if (_debug)
-            std::cout << "  <- " << Print(value);
-        _PC = value;
+            std::cout << "  <- " << Print(arg);
+        _rPC = arg;
         _tick(4);
     }
 }
@@ -471,18 +453,18 @@ void Cpu::_call(bool jump, wreg_t addr)
 
 void Cpu::_call(wreg_t addr)
 {
-    _push(_PCh, _PCl);
+    _push(_rPCh, _rPCl);
 
     if (_debug) {
         std::cout << "  <- " << Print(addr);
     }
-    _PC = addr;
+    _rPC = addr;
 }
 
 void Cpu::_ret(bool jump)
 {
     if (jump) {
-        _pop(_PCh, _PCl);
+        _pop(_rPCh, _rPCl);
         _tick(16);
     }
 }
@@ -490,23 +472,23 @@ void Cpu::_ret(bool jump)
 void Cpu::_push(reg_t high, reg_t low)
 {
     if (_debug) {
-        wreg_t value = high;
-        value = value << 8 | low;
-        std::cout << " <- " << Print(value);
+        wreg_t arg = high;
+        arg = arg << 8 | low;
+        std::cout << " <- " << Print(arg);
     }
 
-    _write(--_SP, high);
-    _write(--_SP, low);
+    _write(--_rSP, high);
+    _write(--_rSP, low);
 }
 
 void Cpu::_pop(reg_t &high, reg_t &low)
 {
-    low = _mem[_SP++];
-    high = _mem[_SP++];
+    low = _mem[_rSP++];
+    high = _mem[_rSP++];
     if (_debug) {
-        wreg_t value = high;
-        value = value << 8 | low;
-        std::cout << " -> " << Print(value);
+        wreg_t arg = high;
+        arg = arg << 8 | low;
+        std::cout << " -> " << Print(arg);
     }
 }
 
@@ -534,157 +516,145 @@ void Cpu::dump(void)
     _dump_reg(std::cout);
 }
 
-wreg_t Cpu::_storew(Register reg, wreg_t value)
-{
-    if (_debug)
-        std::cout << "  <- " << Print(value);
-
-    switch (reg) {
-    case Register::BC: _BC = value; break;
-    case Register::DE: _DE = value; break;
-    case Register::HL: _HL = value; break;
-    case Register::PC: _PC = value; break;
-    case Register::SP: _SP = value; break;
-    default: throw CpuException();
-    }
-    return value;
-}
-
-wreg_t Cpu::_fetchw(Register reg)
+wreg_t &Cpu::_fetchw(Register reg)
 {
     switch (reg) {
-        case Register::BC: return _BC;
-        case Register::DE: return _DE;
-        case Register::HL: return _HL;
-        case Register::PC: return _PC;
-        case Register::SP: return _SP;
+        case Register::BC: return _rBC;
+        case Register::DE: return _rDE;
+        case Register::HL: return _rHL;
+        case Register::PC: return _rPC;
+        case Register::SP: return _rSP;
         default: throw CpuException();
     }
     throw CpuException();
 }
 
-void Cpu::_addw(Register reg, wreg_t value)
+void Cpu::_addw(wreg_t &wdest, wreg_t arg)
 {
-    wreg_t res = _fetchw(reg);
+    wreg_t result = wdest + arg;
 
-    res += value;
-    _flags.C = (res < value) ? true : false;
-    _flags.H = ((res & 0xfff) < (value & 0xfff)) ? true : false;
-    _flags.N = 0;
-    _storew(reg, res);
+    _flags.C = (result < arg) ? true : false;
+    _flags.H = ((result & 0xfff) < (arg & 0xfff)) ? true : false;
+    _set_nflag(false);
+
+    wdest = result;
 }
 
-void Cpu::_addsp(sreg_t value)
+void Cpu::_addsp(sreg_t arg)
 {
-    wreg_t orig = _fetchw(Register::SP);
-    wreg_t res = orig + value;
+    wreg_t &wdest = _rSP;
+    wreg_t result = wdest + arg;
 
-    _flags.C = bit_isset(orig ^ res ^ value, 8);
-    _flags.H = bit_isset(orig ^ res ^ value, 4);
+    _set_cflag(_rSP, arg, result);
+    _set_hflag(_rSP, arg, result);
     _flags.Z = 0;
-    _flags.N = 0;
+    _set_nflag(false);
 
-    _storew(Register::SP, res);
+    wdest = result;
 }
 
-void Cpu::_ldhlsp(sreg_t value)
+void Cpu::_ldhlsp(sreg_t arg)
 {
-    wreg_t orig = _fetchw(Register::SP);
-    wreg_t res = orig + value;
+    wreg_t &wdest = _rHL;
+    wreg_t result = _rSP + arg;
 
-    _flags.C = bit_isset(orig ^ res ^ value, 8);
-    _flags.H = bit_isset(orig ^ res ^ value, 4);
+    _set_cflag(_rSP, arg, result);
+    _set_hflag(_rSP, arg, result);
     _flags.Z = 0;
-    _flags.N = 0;
+    _set_nflag(false);
 
-    _storew(Register::HL, res);
+    wdest = result;
 }
 
-void Cpu::_incw(Register reg)
+void Cpu::_incw(wreg_t &wdest)
 {
-    wreg_t value = _fetchw(reg) + 1;
-    _storew(reg, value);
+    wreg_t result = wdest + 1;
+
+    wdest = result;
 }
 
-void Cpu::_subw(Register reg, wreg_t value)
+void Cpu::_subw(wreg_t &wdest, wreg_t arg)
 {
-    value = _fetchw(reg) - value;
-    _storew(reg, value);
+    wreg_t result = wdest - arg;
+
+    wdest = result;
 }
 
-void Cpu::_decw(Register reg)
+void Cpu::_decw(wreg_t &wdest)
 {
-    wreg_t value = _fetchw(reg) - 1;
-    _storew(reg, value);
+    wreg_t result = wdest - 1;
+
+    wdest = result;
 }
 
-void Cpu::_ldw(Register reg, wreg_t value)
+void Cpu::_ldw(wreg_t &wdest, wreg_t arg)
 {
-    _storew(reg, value);
+    wdest = arg;
 }
 
-void Cpu::_ldi(addr_t addr, reg_t value)
+void Cpu::_ldi(addr_t addr, reg_t arg)
 {
     if (_debug)
         std::cout << " -> " << Print(addr);
-    _write(addr, value);
+
+    _write(addr, arg);
 }
 
-void Cpu::_ldi(addr_t addr, Register reg)
+void Cpu::_ldwi(addr_t addr, wreg_t arg)
 {
     if (_debug)
-        std::cout << " -> " << Print(addr);
-    _write(addr, _fetch(reg));
-}
+        std::cout << " -> " << Print(addr) << " <- " << Print(arg);
 
-void Cpu::_ldwi(addr_t addr, Register reg)
-{
-    wreg_t value = _fetchw(reg);
-    if (_debug)
-        std::cout << " -> " << Print(addr) << " <- " << Print(value);
-    _write(addr, value & 0xff);
-    _write(addr+1, value >> 8);
+    _write(addr, arg & 0xff);
+    _write(addr+1, arg >> 8);
 }
 
 void Cpu::_cpl(void)
 {
-    reg_t value = _fetch(Register::A);
-    value = ~value;
-    _flags.N = true;
-    _flags.H = true;
-    _store(Register::A, value);
+    reg_t &dest = _rA;
+    reg_t result = ~dest;
+
+    _flags.H = 1;
+    _flags.N = 1;
+
+    dest = result;
 }
 
 void Cpu::_ccf(void)
 {
     _flags.C = !_flags.C;
-    _flags.N = 0;
     _flags.H = 0;
+    _flags.N = 0;
 }
 
 void Cpu::_scf(void)
 {
-    _flags.N = false;
-    _flags.H = false;
-    _flags.C = true;
+    _flags.H = 0;
+    _flags.C = 1;
+    _flags.N = 0;
 }
 
 void Cpu::_daa(void)
 {
-    wreg_t value = _fetch(Register::A);
+    reg_t &dest = _rA;
+    wreg_t arg = 0;
+    wreg_t result = dest;
 
     if (!_flags.N) {
-        if (_flags.H || (value & 0x0f) > 9) value += 0x06;
-        if (_flags.C || value > 0x9f) value += 0x60;
+        if (_flags.H || (dest & 0x0f) > 9) arg += 0x06;
+        if (_flags.C || dest > 0x99) arg += 0x60;
+        result += arg;
     } else {
-        if (_flags.H) value = (value - 6) & 0xff;
-        if (_flags.C) value -= 0x60;
+        if (_flags.H) arg += 0x6;
+        if (_flags.C) arg += 0x60;
+        result -= arg;
     }
 
-    _flags.C = (value & 0x100) != 0;
+    _set_cflag(dest, arg, result);
     _flags.H = 0;
-    _flags.Z = (value & 0xFF) == 0;
-    _store(Register::A, value);
+    _set_zflag(result);
+
+    dest = result;
 }
 
 #define OPCODE(op, cycles, bytes, name, func) \
@@ -702,211 +672,211 @@ void Cpu::_daa(void)
 
 void Cpu::dispatch(void)
 {
-    wreg_t pc = _PC;
-    reg_t op = _mem[_PC++];
+    wreg_t pc = _rPC;
+    reg_t op = _mem[_rPC++];
     //Register src = Register(op & 0x7);
     //Register dest = Register((op & 0x38) >> 3);
 
     switch (op) {
         OPCODE(0x00, 4, 1, "NOP", );
-        OPCODE(0x01, 10, 3, "LD BC,d16", _ldw(Register::BC, _d16()));
-        OPCODE(0x02, 8, 1, "LD (BC),A", _ldi(_BC, _A));
-        OPCODE(0x03, 8, 1, "INC BC", _incw(Register::BC));
-        OPCODE(0x04, 4, 1, "INC B", _inc(Register::B));
-        OPCODE(0x05, 4, 1, "DEC B", _dec(Register::B));
-        OPCODE(0x06, 8, 2, "LD B,d8", _ld(Register::B, _d8()));
+        OPCODE(0x01, 10, 3, "LD BC,d16", _ldw(_rBC, _d16()));
+        OPCODE(0x02, 8, 1, "LD (BC),A", _ldi(_rBC, _rA));
+        OPCODE(0x03, 8, 1, "INC BC", _incw(_rBC));
+        OPCODE(0x04, 4, 1, "INC B", _inc(_rB));
+        OPCODE(0x05, 4, 1, "DEC B", _dec(_rB));
+        OPCODE(0x06, 8, 2, "LD B,d8", _ld(_rB, _d8()));
         OPCODE(0x07, 4, 1, "RLCA", _rlca());
-        OPCODE(0x08, 20, 3, "LD (a16), SP", _ldwi(_d16(), Register::SP));
-        OPCODE(0x09, 8, 1, "ADD HL,BC", _addw(Register::HL, _BC));
-        OPCODE(0x0A, 8, 1, "LD A,(BC)", _ld(Register::A, _fetch(Register::BC)));
-        OPCODE(0x0B, 8, 1, "DEC BC", _decw(Register::BC));
-        OPCODE(0x0C, 4, 1, "INC C", _inc(Register::C));
-        OPCODE(0x0D, 4, 1, "DEC C", _dec(Register::C));
-        OPCODE(0x0E, 8, 2, "LD C,d8", _ld(Register::C, _d8()));
+        OPCODE(0x08, 20, 3, "LD (a16), SP", _ldwi(_d16(), _rSP));
+        OPCODE(0x09, 8, 1, "ADD HL,BC", _addw(_rHL, _rBC));
+        OPCODE(0x0A, 8, 1, "LD A,(BC)", _ld(_rA, _read(_rBC)));
+        OPCODE(0x0B, 8, 1, "DEC BC", _decw(_rBC));
+        OPCODE(0x0C, 4, 1, "INC C", _inc(_rC));
+        OPCODE(0x0D, 4, 1, "DEC C", _dec(_rC));
+        OPCODE(0x0E, 8, 2, "LD C,d8", _ld(_rC, _d8()));
         OPCODE(0x0F, 4, 1, "RRCA", _rrca());
         OPCODE(0x10, 4, 2, "STOP", _stop());
-        OPCODE(0x11, 10, 3, "LD DE,d16", _ldw(Register::DE, _d16()));
-        OPCODE(0x12, 8, 1, "LD (DE),A", _ldi(_DE, Register::A));
-        OPCODE(0x13, 8, 1, "INC DE", _incw(Register::DE));
-        OPCODE(0x14, 4, 1, "INC D", _inc(Register::D));
-        OPCODE(0x15, 4, 1, "DEC D", _dec(Register::D));
-        OPCODE(0x16, 8, 2, "LD D,d8", _ld(Register::D, _d8()));
+        OPCODE(0x11, 10, 3, "LD DE,d16", _ldw(_rDE, _d16()));
+        OPCODE(0x12, 8, 1, "LD (DE),A", _ldi(_rDE, _rA));
+        OPCODE(0x13, 8, 1, "INC DE", _incw(_rDE));
+        OPCODE(0x14, 4, 1, "INC D", _inc(_rD));
+        OPCODE(0x15, 4, 1, "DEC D", _dec(_rD));
+        OPCODE(0x16, 8, 2, "LD D,d8", _ld(_rD, _d8()));
         OPCODE(0x17, 4, 1, "RLA", _rla());
         OPCODE(0x18, 12, 2, "JR r8", _jr(true, _r8()));
-        OPCODE(0x19, 8, 1, "ADD HL,DE", _addw(Register::HL, _DE));
-        OPCODE(0x1A, 8, 1, "LD A,(DE)", _ld(Register::A, _fetch(Register::DE)));
-        OPCODE(0x1B, 8, 1, "DEC DE", _decw(Register::DE));
-        OPCODE(0x1C, 4, 1, "INC E", _inc(Register::E));
-        OPCODE(0x1D, 4, 1, "DEC E", _dec(Register::E));
-        OPCODE(0x1E, 8, 2, "LD E,d8", _ld(Register::E, _d8()));
+        OPCODE(0x19, 8, 1, "ADD HL,DE", _addw(_rHL, _rDE));
+        OPCODE(0x1A, 8, 1, "LD A,(DE)", _ld(_rA, _read(_rDE)));
+        OPCODE(0x1B, 8, 1, "DEC DE", _decw(_rDE));
+        OPCODE(0x1C, 4, 1, "INC E", _inc(_rE));
+        OPCODE(0x1D, 4, 1, "DEC E", _dec(_rE));
+        OPCODE(0x1E, 8, 2, "LD E,d8", _ld(_rE, _d8()));
         OPCODE(0x1F, 4, 1, "RRA", _rra());
         OPCODE(0x20, 8, 2, "JR NZ,r8", _jr(!_flags.Z, _r8()));
-        OPCODE(0x21, 10, 3, "LD HL,d16", _ldw(Register::HL, _d16()));
-        OPCODE(0x22, 8, 1, "LDI (HL), A", _ldi(_HL++, Register::A));
-        OPCODE(0x23, 8, 1, "INC HL", _incw(Register::HL));
-        OPCODE(0x24, 4, 1, "INC H", _inc(Register::H));
-        OPCODE(0x25, 4, 1, "DEC H", _dec(Register::H));
-        OPCODE(0x26, 8, 2, "LD H,d8", _ld(Register::H, _d8()));
+        OPCODE(0x21, 10, 3, "LD HL,d16", _ldw(_rHL, _d16()));
+        OPCODE(0x22, 8, 1, "LDI (HL), A", _ldi(_rHL++, _rA));
+        OPCODE(0x23, 8, 1, "INC HL", _incw(_rHL));
+        OPCODE(0x24, 4, 1, "INC H", _inc(_rH));
+        OPCODE(0x25, 4, 1, "DEC H", _dec(_rH));
+        OPCODE(0x26, 8, 2, "LD H,d8", _ld(_rH, _d8()));
         OPCODE(0x27, 4, 1, "DAA", _daa());
         OPCODE(0x28, 8, 2, "JR Z,r8", _jr(_flags.Z, _r8()));
-        OPCODE(0x29, 8, 1, "ADD HL,HL", _addw(Register::HL, _HL));
-        OPCODE(0x2A, 8, 1, "LDI a, (HL)", _ld(Register::A, _mem[_HL++]));
-        OPCODE(0x2B, 8, 1, "DEC HL", _decw(Register::HL));
-        OPCODE(0x2C, 4, 1, "INC L", _inc(Register::L));
-        OPCODE(0x2D, 4, 1, "DEC L", _dec(Register::L));
-        OPCODE(0x2E, 8, 2, "LD L,d8", _ld(Register::L, _d8()));
+        OPCODE(0x29, 8, 1, "ADD HL,HL", _addw(_rHL, _rHL));
+        OPCODE(0x2A, 8, 1, "LDI a, (HL)", _ld(_rA, _mem[_rHL++]));
+        OPCODE(0x2B, 8, 1, "DEC HL", _decw(_rHL));
+        OPCODE(0x2C, 4, 1, "INC L", _inc(_rL));
+        OPCODE(0x2D, 4, 1, "DEC L", _dec(_rL));
+        OPCODE(0x2E, 8, 2, "LD L,d8", _ld(_rL, _d8()));
         OPCODE(0x2F, 8, 2, "CPL", _cpl());
         OPCODE(0x30, 8, 2, "JR NC,r8", _jr(!_flags.C, _r8()));
-        OPCODE(0x31, 12, 3, "LD SP,d16", _ldw(Register::SP, _d16()));
-        OPCODE(0x32, 8, 1, "LDD (HL), A", _ldi(_HL--, Register::A));
-        OPCODE(0x33, 8, 1, "INC SP", _incw(Register::SP));
-        OPCODE(0x34, 12, 1, "INC (HL)", _inc(Register::HL));
-        OPCODE(0x35, 12, 1, "DEC (HL)", _dec(Register::HL));
-        OPCODE(0x36, 8, 2, "LD (HL),d8", _ldi(_HL, _d8()));
+        OPCODE(0x31, 12, 3, "LD SP,d16", _ldw(_rSP, _d16()));
+        OPCODE(0x32, 8, 1, "LDD (HL), A", _ldi(_rHL--, _rA));
+        OPCODE(0x33, 8, 1, "INC SP", _incw(_rSP));
+        OPCODE(0x34, 12, 1, "INC (HL)", _inc(_read(_rHL)));
+        OPCODE(0x35, 12, 1, "DEC (HL)", _dec(_read(_rHL)));
+        OPCODE(0x36, 8, 2, "LD (HL),d8", _ldi(_rHL, _d8()));
         OPCODE(0x37, 4, 1, "SCF", _scf());
         OPCODE(0x38, 8 ,2, "JR C,r8", _jr(_flags.C, _r8()));
-        OPCODE(0x39, 8, 1, "ADD HL,SP", _addw(Register::HL, _SP));
-        OPCODE(0x3A, 8, 1, "LD A, (HL-)", _ld(Register::A, _mem[_HL--]));
-        OPCODE(0x3B, 8, 1, "DEC SP", _decw(Register::SP));
-        OPCODE(0x3C, 4, 1, "INC A", _inc(Register::A));
-        OPCODE(0x3D, 4, 1, "DEC A", _dec(Register::A));
-        OPCODE(0x3E, 8, 2, "LD A,d8", _ld(Register::A, _d8()));
+        OPCODE(0x39, 8, 1, "ADD HL,SP", _addw(_rHL, _rSP));
+        OPCODE(0x3A, 8, 1, "LD A, (HL-)", _ld(_rA, _mem[_rHL--]));
+        OPCODE(0x3B, 8, 1, "DEC SP", _decw(_rSP));
+        OPCODE(0x3C, 4, 1, "INC A", _inc(_rA));
+        OPCODE(0x3D, 4, 1, "DEC A", _dec(_rA));
+        OPCODE(0x3E, 8, 2, "LD A,d8", _ld(_rA, _d8()));
         OPCODE(0x3F, 4, 1, "CCF", _ccf());
-        OPCODE(0x40, 4, 1, "LD B,B", _ld(Register::B, _B));
-        OPCODE(0x41, 4, 1, "LD B,C", _ld(Register::B, _C));
-        OPCODE(0x42, 4, 1, "LD B,D", _ld(Register::B, _D));
-        OPCODE(0x43, 4, 1, "LD B,E", _ld(Register::B, _E));
-        OPCODE(0x44, 4, 1, "LD B,H", _ld(Register::B, _H));
-        OPCODE(0x45, 4, 1, "LD B,L", _ld(Register::B, _L));
-        OPCODE(0x46, 4, 1, "LD B,(HL)", _ld(Register::B, _fetch(Register::HL)));
-        OPCODE(0x47, 4, 1, "LD B,A", _ld(Register::B, _A));
-        OPCODE(0x48, 4, 1, "LD C,B", _ld(Register::C, _B));
-        OPCODE(0x49, 4, 1, "LD C,C", _ld(Register::C, _C));
-        OPCODE(0x4A, 4, 1, "LD C,D", _ld(Register::C, _D));
-        OPCODE(0x4B, 4, 1, "LD C,E", _ld(Register::C, _E));
-        OPCODE(0x4C, 4, 1, "LD C,H", _ld(Register::C, _H));
-        OPCODE(0x4D, 4, 1, "LD C,L", _ld(Register::C, _L));
-        OPCODE(0x4E, 4, 1, "LD C,(HL)", _ld(Register::C, _fetch(Register::HL)));
-        OPCODE(0x4F, 4, 1, "LD C,A", _ld(Register::C, _A));
-        OPCODE(0x50, 4, 1, "LD D,B", _ld(Register::D, _B));
-        OPCODE(0x51, 4, 1, "LD D,C", _ld(Register::D, _C));
-        OPCODE(0x52, 4, 1, "LD D,D", _ld(Register::D, _D));
-        OPCODE(0x53, 4, 1, "LD D,E", _ld(Register::D, _E));
-        OPCODE(0x54, 4, 1, "LD D,H", _ld(Register::D, _H));
-        OPCODE(0x55, 4, 1, "LD D,L", _ld(Register::D, _L));
-        OPCODE(0x56, 4, 1, "LD D,(HL)", _ld(Register::D, _fetch(Register::HL)));
-        OPCODE(0x57, 4, 1, "LD D,A", _ld(Register::D, _A));
-        OPCODE(0x58, 4, 1, "LD E,B", _ld(Register::E, _B));
-        OPCODE(0x59, 4, 1, "LD E,C", _ld(Register::E, _C));
-        OPCODE(0x5A, 4, 1, "LD E,D", _ld(Register::E, _D));
-        OPCODE(0x5B, 4, 1, "LD E,E", _ld(Register::E, _E));
-        OPCODE(0x5C, 4, 1, "LD E,H", _ld(Register::E, _H));
-        OPCODE(0x5D, 4, 1, "LD E,L", _ld(Register::E, _L));
-        OPCODE(0x5E, 4, 1, "LD E,(HL)", _ld(Register::E, _fetch(Register::HL)));
-        OPCODE(0x5F, 4, 1, "LD E,A", _ld(Register::E, _A));
-        OPCODE(0x60, 4, 1, "LD H,B", _ld(Register::H, _B));
-        OPCODE(0x61, 4, 1, "LD H,C", _ld(Register::H, _C));
-        OPCODE(0x62, 4, 1, "LD H,D", _ld(Register::H, _D));
-        OPCODE(0x63, 4, 1, "LD H,E", _ld(Register::H, _E));
-        OPCODE(0x64, 4, 1, "LD H,H", _ld(Register::H, _H));
-        OPCODE(0x65, 4, 1, "LD H,L", _ld(Register::H, _L));
-        OPCODE(0x66, 4, 1, "LD H,(HL)", _ld(Register::H, _fetch(Register::HL)));
-        OPCODE(0x67, 4, 1, "LD H,A", _ld(Register::H, _A));
-        OPCODE(0x68, 4, 1, "LD L,B", _ld(Register::L, _B));
-        OPCODE(0x69, 4, 1, "LD L,C", _ld(Register::L, _C));
-        OPCODE(0x6A, 4, 1, "LD L,D", _ld(Register::L, _D));
-        OPCODE(0x6B, 4, 1, "LD L,E", _ld(Register::L, _E));
-        OPCODE(0x6C, 4, 1, "LD L,H", _ld(Register::L, _H));
-        OPCODE(0x6D, 4, 1, "LD L,L", _ld(Register::L, _L));
-        OPCODE(0x6E, 4, 1, "LD L,(HL)", _ld(Register::L, _fetch(Register::HL)));
-        OPCODE(0x6F, 4, 1, "LD L,A", _ld(Register::L, _A));
-        OPCODE(0x70, 4, 1, "LD (HL),B", _ldi(_HL, Register::B));
-        OPCODE(0x71, 4, 1, "LD (HL),C", _ldi(_HL, Register::C));
-        OPCODE(0x72, 4, 1, "LD (HL),D", _ldi(_HL, Register::D));
-        OPCODE(0x73, 4, 1, "LD (HL),E", _ldi(_HL, Register::E));
-        OPCODE(0x74, 4, 1, "LD (HL),H", _ldi(_HL, Register::H));
-        OPCODE(0x75, 4, 1, "LD (HL),L", _ldi(_HL, Register::L));
+        OPCODE(0x40, 4, 1, "LD B,B", _ld(_rB, _rB));
+        OPCODE(0x41, 4, 1, "LD B,C", _ld(_rB, _rC));
+        OPCODE(0x42, 4, 1, "LD B,D", _ld(_rB, _rD));
+        OPCODE(0x43, 4, 1, "LD B,E", _ld(_rB, _rE));
+        OPCODE(0x44, 4, 1, "LD B,H", _ld(_rB, _rH));
+        OPCODE(0x45, 4, 1, "LD B,L", _ld(_rB, _rL));
+        OPCODE(0x46, 4, 1, "LD B,(HL)", _ld(_rB, _read(_rHL)));
+        OPCODE(0x47, 4, 1, "LD B,A", _ld(_rB, _rA));
+        OPCODE(0x48, 4, 1, "LD C,B", _ld(_rC, _rB));
+        OPCODE(0x49, 4, 1, "LD C,C", _ld(_rC, _rC));
+        OPCODE(0x4A, 4, 1, "LD C,D", _ld(_rC, _rD));
+        OPCODE(0x4B, 4, 1, "LD C,E", _ld(_rC, _rE));
+        OPCODE(0x4C, 4, 1, "LD C,H", _ld(_rC, _rH));
+        OPCODE(0x4D, 4, 1, "LD C,L", _ld(_rC, _rL));
+        OPCODE(0x4E, 4, 1, "LD C,(HL)", _ld(_rC, _read(_rHL)));
+        OPCODE(0x4F, 4, 1, "LD C,A", _ld(_rC, _rA));
+        OPCODE(0x50, 4, 1, "LD D,B", _ld(_rD, _rB));
+        OPCODE(0x51, 4, 1, "LD D,C", _ld(_rD, _rC));
+        OPCODE(0x52, 4, 1, "LD D,D", _ld(_rD, _rD));
+        OPCODE(0x53, 4, 1, "LD D,E", _ld(_rD, _rE));
+        OPCODE(0x54, 4, 1, "LD D,H", _ld(_rD, _rH));
+        OPCODE(0x55, 4, 1, "LD D,L", _ld(_rD, _rL));
+        OPCODE(0x56, 4, 1, "LD D,(HL)", _ld(_rD, _read(_rHL)));
+        OPCODE(0x57, 4, 1, "LD D,A", _ld(_rD, _rA));
+        OPCODE(0x58, 4, 1, "LD E,B", _ld(_rE, _rB));
+        OPCODE(0x59, 4, 1, "LD E,C", _ld(_rE, _rC));
+        OPCODE(0x5A, 4, 1, "LD E,D", _ld(_rE, _rD));
+        OPCODE(0x5B, 4, 1, "LD E,E", _ld(_rE, _rE));
+        OPCODE(0x5C, 4, 1, "LD E,H", _ld(_rE, _rH));
+        OPCODE(0x5D, 4, 1, "LD E,L", _ld(_rE, _rL));
+        OPCODE(0x5E, 4, 1, "LD E,(HL)", _ld(_rE, _read(_rHL)));
+        OPCODE(0x5F, 4, 1, "LD E,A", _ld(_rE, _rA));
+        OPCODE(0x60, 4, 1, "LD H,B", _ld(_rH, _rB));
+        OPCODE(0x61, 4, 1, "LD H,C", _ld(_rH, _rC));
+        OPCODE(0x62, 4, 1, "LD H,D", _ld(_rH, _rD));
+        OPCODE(0x63, 4, 1, "LD H,E", _ld(_rH, _rE));
+        OPCODE(0x64, 4, 1, "LD H,H", _ld(_rH, _rH));
+        OPCODE(0x65, 4, 1, "LD H,L", _ld(_rH, _rL));
+        OPCODE(0x66, 4, 1, "LD H,(HL)", _ld(_rH, _read(_rHL)));
+        OPCODE(0x67, 4, 1, "LD H,A", _ld(_rH, _rA));
+        OPCODE(0x68, 4, 1, "LD L,B", _ld(_rL, _rB));
+        OPCODE(0x69, 4, 1, "LD L,C", _ld(_rL, _rC));
+        OPCODE(0x6A, 4, 1, "LD L,D", _ld(_rL, _rD));
+        OPCODE(0x6B, 4, 1, "LD L,E", _ld(_rL, _rE));
+        OPCODE(0x6C, 4, 1, "LD L,H", _ld(_rL, _rH));
+        OPCODE(0x6D, 4, 1, "LD L,L", _ld(_rL, _rL));
+        OPCODE(0x6E, 4, 1, "LD L,(HL)", _ld(_rL, _read(_rHL)));
+        OPCODE(0x6F, 4, 1, "LD L,A", _ld(_rL, _rA));
+        OPCODE(0x70, 4, 1, "LD (HL),B", _ldi(_rHL, _rB));
+        OPCODE(0x71, 4, 1, "LD (HL),C", _ldi(_rHL, _rC));
+        OPCODE(0x72, 4, 1, "LD (HL),D", _ldi(_rHL, _rD));
+        OPCODE(0x73, 4, 1, "LD (HL),E", _ldi(_rHL, _rE));
+        OPCODE(0x74, 4, 1, "LD (HL),H", _ldi(_rHL, _rH));
+        OPCODE(0x75, 4, 1, "LD (HL),L", _ldi(_rHL, _rL));
         OPCODE(0x76, 4, 1, "HALT", _halt());
-        OPCODE(0x77, 4, 1, "LD (HL),A", _ldi(_HL, Register::A));
-        OPCODE(0x78, 4, 1, "LD A,B", _ld(Register::A, _B));
-        OPCODE(0x79, 4, 1, "LD A,C", _ld(Register::A, _C));
-        OPCODE(0x7A, 4, 1, "LD A,D", _ld(Register::A, _D));
-        OPCODE(0x7B, 4, 1, "LD A,E", _ld(Register::A, _E));
-        OPCODE(0x7C, 4, 1, "LD A,H", _ld(Register::A, _H));
-        OPCODE(0x7D, 4, 1, "LD A,L", _ld(Register::A, _L));
-        OPCODE(0x7E, 4, 1, "LD A,(HL)", _ld(Register::A, _fetch(Register::HL)));
-        OPCODE(0x7F, 4, 1, "LD A,A", _ld(Register::A, _A));
-        OPCODE(0x80, 4, 1, "ADD A,B", _add(Register::A, _B));
-        OPCODE(0x81, 4, 1, "ADD A,C", _add(Register::A, _C));
-        OPCODE(0x82, 4, 1, "ADD A,D", _add(Register::A, _D));
-        OPCODE(0x83, 4, 1, "ADD A,E", _add(Register::A, _E));
-        OPCODE(0x84, 4, 1, "ADD A,H", _add(Register::A, _H));
-        OPCODE(0x85, 4, 1, "ADD A,L", _add(Register::A, _L));
-        OPCODE(0x86, 4, 1, "ADD A,(HL)", _add(Register::A, _fetch(Register::HL)));
-        OPCODE(0x87, 4, 1, "ADD A,A", _add(Register::A, _A));
-        OPCODE(0x88, 8, 1, "ADC A,B", _adc(Register::A, _B));
-        OPCODE(0x89, 8, 1, "ADC A,C", _adc(Register::A, _C));
-        OPCODE(0x8A, 8, 1, "ADC A,D", _adc(Register::A, _D));
-        OPCODE(0x8B, 8, 1, "ADC A,E", _adc(Register::A, _E));
-        OPCODE(0x8C, 8, 1, "ADC A,H", _adc(Register::A, _H));
-        OPCODE(0x8D, 8, 1, "ADC A,L", _adc(Register::A, _L));
-        OPCODE(0x8E, 8, 1, "ADC A,(HL)", _adc(Register::A, _fetch(Register::HL)));
-        OPCODE(0x8F, 8, 1, "ADC A,A", _adc(Register::A, _A));
-        OPCODE(0x90, 4, 1, "SUB B", _sub(Register::A, _B));
-        OPCODE(0x91, 4, 1, "SUB C", _sub(Register::A, _C));
-        OPCODE(0x92, 4, 1, "SUB D", _sub(Register::A, _D));
-        OPCODE(0x93, 4, 1, "SUB E", _sub(Register::A, _E));
-        OPCODE(0x94, 4, 1, "SUB H", _sub(Register::A, _H));
-        OPCODE(0x95, 4, 1, "SUB L", _sub(Register::A, _L));
-        OPCODE(0x96, 4, 1, "SUB (HL)", _sub(Register::A, _fetch(Register::HL)));
-        OPCODE(0x97, 4, 1, "SUB A", _sub(Register::A, _A));
-        OPCODE(0x98, 8, 1, "SBC A,B", _sbc(Register::A, _B));
-        OPCODE(0x99, 8, 1, "SBC A,C", _sbc(Register::A, _C));
-        OPCODE(0x9A, 8, 1, "SBC A,D", _sbc(Register::A, _D));
-        OPCODE(0x9B, 8, 1, "SBC A,E", _sbc(Register::A, _E));
-        OPCODE(0x9C, 8, 1, "SBC A,H", _sbc(Register::A, _H));
-        OPCODE(0x9D, 8, 1, "SBC A,L", _sbc(Register::A, _L));
-        OPCODE(0x9E, 8, 1, "SBC A,(HL)", _sbc(Register::A, _fetch(Register::HL)));
-        OPCODE(0x9F, 8, 1, "SBC A,A", _sbc(Register::A, _A));
-        OPCODE(0xA0, 4, 1, "AND B", _and(Register::A, _B));
-        OPCODE(0xA1, 4, 1, "AND C", _and(Register::A, _C));
-        OPCODE(0xA2, 4, 1, "AND D", _and(Register::A, _D));
-        OPCODE(0xA3, 4, 1, "AND E", _and(Register::A, _E));
-        OPCODE(0xA4, 4, 1, "AND H", _and(Register::A, _H));
-        OPCODE(0xA5, 4, 1, "AND L", _and(Register::A, _L));
-        OPCODE(0xA6, 4, 1, "AND (HL)", _and(Register::A, _fetch(Register::HL)));
-        OPCODE(0xA7, 4, 1, "AND A", _and(Register::A, _A));
-        OPCODE(0xA8, 4, 1, "XOR B", _xor(Register::A, _B));
-        OPCODE(0xA9, 4, 1, "XOR C", _xor(Register::A, _C));
-        OPCODE(0xAA, 4, 1, "XOR D", _xor(Register::A, _D));
-        OPCODE(0xAB, 4, 1, "XOR E", _xor(Register::A, _E));
-        OPCODE(0xAC, 4, 1, "XOR H", _xor(Register::A, _H));
-        OPCODE(0xAD, 4, 1, "XOR L", _xor(Register::A, _L));
-        OPCODE(0xAE, 7, 2, "XOR (HL)", _xor(Register::A, _fetch(Register::HL)));
-        OPCODE(0xAF, 4, 1, "XOR A", _xor(Register::A, _A));
-        OPCODE(0xB0, 4, 1, "OR B", _or(Register::A, _B));
-        OPCODE(0xB1, 4, 1, "OR C", _or(Register::A, _C));
-        OPCODE(0xB2, 4, 1, "OR D", _or(Register::A, _D));
-        OPCODE(0xB3, 4, 1, "OR E", _or(Register::A, _E));
-        OPCODE(0xB4, 4, 1, "OR H", _or(Register::A, _H));
-        OPCODE(0xB5, 4, 1, "OR L", _or(Register::A, _L));
-        OPCODE(0xB6, 4, 1, "OR (HL)", _or(Register::A, _fetch(Register::HL)));
-        OPCODE(0xB7, 4, 1, "OR A", _or(Register::A, _A));
-        OPCODE(0xB8, 4, 1, "CP B", _cp(_A, _B));
-        OPCODE(0xB9, 4, 1, "CP C", _cp(_A, _C));
-        OPCODE(0xBA, 4, 1, "CP D", _cp(_A, _D));
-        OPCODE(0xBB, 4, 1, "CP E", _cp(_A, _E));
-        OPCODE(0xBC, 4, 1, "CP H", _cp(_A, _H));
-        OPCODE(0xBD, 4, 1, "CP L", _cp(_A, _L));
-        OPCODE(0xBE, 4, 1, "CP (HL)", _cp(_A, _fetch(Register::HL)));
-        OPCODE(0xBF, 4, 1, "CP A", _cp(_A, _A));
+        OPCODE(0x77, 4, 1, "LD (HL),A", _ldi(_rHL, _rA));
+        OPCODE(0x78, 4, 1, "LD A,B", _ld(_rA, _rB));
+        OPCODE(0x79, 4, 1, "LD A,C", _ld(_rA, _rC));
+        OPCODE(0x7A, 4, 1, "LD A,D", _ld(_rA, _rD));
+        OPCODE(0x7B, 4, 1, "LD A,E", _ld(_rA, _rE));
+        OPCODE(0x7C, 4, 1, "LD A,H", _ld(_rA, _rH));
+        OPCODE(0x7D, 4, 1, "LD A,L", _ld(_rA, _rL));
+        OPCODE(0x7E, 4, 1, "LD A,(HL)", _ld(_rA, _read(_rHL)));
+        OPCODE(0x7F, 4, 1, "LD A,A", _ld(_rA, _rA));
+        OPCODE(0x80, 4, 1, "ADD A,B", _add(_rA, _rB));
+        OPCODE(0x81, 4, 1, "ADD A,C", _add(_rA, _rC));
+        OPCODE(0x82, 4, 1, "ADD A,D", _add(_rA, _rD));
+        OPCODE(0x83, 4, 1, "ADD A,E", _add(_rA, _rE));
+        OPCODE(0x84, 4, 1, "ADD A,H", _add(_rA, _rH));
+        OPCODE(0x85, 4, 1, "ADD A,L", _add(_rA, _rL));
+        OPCODE(0x86, 4, 1, "ADD A,(HL)", _add(_rA, _read(_rHL)));
+        OPCODE(0x87, 4, 1, "ADD A,A", _add(_rA, _rA));
+        OPCODE(0x88, 8, 1, "ADC A,B", _adc(_rA, _rB));
+        OPCODE(0x89, 8, 1, "ADC A,C", _adc(_rA, _rC));
+        OPCODE(0x8A, 8, 1, "ADC A,D", _adc(_rA, _rD));
+        OPCODE(0x8B, 8, 1, "ADC A,E", _adc(_rA, _rE));
+        OPCODE(0x8C, 8, 1, "ADC A,H", _adc(_rA, _rH));
+        OPCODE(0x8D, 8, 1, "ADC A,L", _adc(_rA, _rL));
+        OPCODE(0x8E, 8, 1, "ADC A,(HL)", _adc(_rA, _read(_rHL)));
+        OPCODE(0x8F, 8, 1, "ADC A,A", _adc(_rA, _rA));
+        OPCODE(0x90, 4, 1, "SUB B", _sub(_rA, _rB));
+        OPCODE(0x91, 4, 1, "SUB C", _sub(_rA, _rC));
+        OPCODE(0x92, 4, 1, "SUB D", _sub(_rA, _rD));
+        OPCODE(0x93, 4, 1, "SUB E", _sub(_rA, _rE));
+        OPCODE(0x94, 4, 1, "SUB H", _sub(_rA, _rH));
+        OPCODE(0x95, 4, 1, "SUB L", _sub(_rA, _rL));
+        OPCODE(0x96, 4, 1, "SUB (HL)", _sub(_rA, _read(_rHL)));
+        OPCODE(0x97, 4, 1, "SUB A", _sub(_rA, _rA));
+        OPCODE(0x98, 8, 1, "SBC A,B", _sbc(_rA, _rB));
+        OPCODE(0x99, 8, 1, "SBC A,C", _sbc(_rA, _rC));
+        OPCODE(0x9A, 8, 1, "SBC A,D", _sbc(_rA, _rD));
+        OPCODE(0x9B, 8, 1, "SBC A,E", _sbc(_rA, _rE));
+        OPCODE(0x9C, 8, 1, "SBC A,H", _sbc(_rA, _rH));
+        OPCODE(0x9D, 8, 1, "SBC A,L", _sbc(_rA, _rL));
+        OPCODE(0x9E, 8, 1, "SBC A,(HL)", _sbc(_rA, _read(_rHL)));
+        OPCODE(0x9F, 8, 1, "SBC A,A", _sbc(_rA, _rA));
+        OPCODE(0xA0, 4, 1, "AND B", _and(_rA, _rB));
+        OPCODE(0xA1, 4, 1, "AND C", _and(_rA, _rC));
+        OPCODE(0xA2, 4, 1, "AND D", _and(_rA, _rD));
+        OPCODE(0xA3, 4, 1, "AND E", _and(_rA, _rE));
+        OPCODE(0xA4, 4, 1, "AND H", _and(_rA, _rH));
+        OPCODE(0xA5, 4, 1, "AND L", _and(_rA, _rL));
+        OPCODE(0xA6, 4, 1, "AND (HL)", _and(_rA, _read(_rHL)));
+        OPCODE(0xA7, 4, 1, "AND A", _and(_rA, _rA));
+        OPCODE(0xA8, 4, 1, "XOR B", _xor(_rA, _rB));
+        OPCODE(0xA9, 4, 1, "XOR C", _xor(_rA, _rC));
+        OPCODE(0xAA, 4, 1, "XOR D", _xor(_rA, _rD));
+        OPCODE(0xAB, 4, 1, "XOR E", _xor(_rA, _rE));
+        OPCODE(0xAC, 4, 1, "XOR H", _xor(_rA, _rH));
+        OPCODE(0xAD, 4, 1, "XOR L", _xor(_rA, _rL));
+        OPCODE(0xAE, 7, 2, "XOR (HL)", _xor(_rA, _read(_rHL)));
+        OPCODE(0xAF, 4, 1, "XOR A", _xor(_rA, _rA));
+        OPCODE(0xB0, 4, 1, "OR B", _or(_rA, _rB));
+        OPCODE(0xB1, 4, 1, "OR C", _or(_rA, _rC));
+        OPCODE(0xB2, 4, 1, "OR D", _or(_rA, _rD));
+        OPCODE(0xB3, 4, 1, "OR E", _or(_rA, _rE));
+        OPCODE(0xB4, 4, 1, "OR H", _or(_rA, _rH));
+        OPCODE(0xB5, 4, 1, "OR L", _or(_rA, _rL));
+        OPCODE(0xB6, 4, 1, "OR (HL)", _or(_rA, _read(_rHL)));
+        OPCODE(0xB7, 4, 1, "OR A", _or(_rA, _rA));
+        OPCODE(0xB8, 4, 1, "CP B", _cp(_rA, _rB));
+        OPCODE(0xB9, 4, 1, "CP C", _cp(_rA, _rC));
+        OPCODE(0xBA, 4, 1, "CP D", _cp(_rA, _rD));
+        OPCODE(0xBB, 4, 1, "CP E", _cp(_rA, _rE));
+        OPCODE(0xBC, 4, 1, "CP H", _cp(_rA, _rH));
+        OPCODE(0xBD, 4, 1, "CP L", _cp(_rA, _rL));
+        OPCODE(0xBE, 4, 1, "CP (HL)", _cp(_rA, _read(_rHL)));
+        OPCODE(0xBF, 4, 1, "CP A", _cp(_rA, _rA));
         OPCODE(0xC0, 8, 1, "RET NZ", _ret(!_flags.Z));
-        OPCODE(0xC1, 12, 1, "POP BC", _pop(_B, _C));
+        OPCODE(0xC1, 12, 1, "POP BC", _pop(_rB, _rC));
         OPCODE(0xC2, 12, 0, "JP NZ", _jp(!_flags.Z, _d16()));
         OPCODE(0xC3, 12, 0, "JP", _jp(true, _d16()));
         OPCODE(0xC4, 12, 3, "CALL NZ,a16", _call(!_flags.Z, _d16()));
-        OPCODE(0xC5, 16, 1, "PUSH BC", _push(_B, _C));
-        OPCODE(0xC6, 8, 2, "ADD a,d8", _add(Register::A, _d8()));
+        OPCODE(0xC5, 16, 1, "PUSH BC", _push(_rB, _rC));
+        OPCODE(0xC6, 8, 2, "ADD a,d8", _add(_rA, _d8()));
         OPCODE(0xC7, 16, 1, "RST 00H", _rst(0x00));
         OPCODE(0xC8, 8, 1, "RET Z", _ret(_flags.Z));
         OPCODE(0xC9, 4, 1, "RET", _ret(true));
@@ -914,44 +884,44 @@ void Cpu::dispatch(void)
         OPCODE(0xCB, 16, 1, "PREFIX CB", prefix_cb());
         OPCODE(0xCC, 12, 3, "CALL Z,a16", _call(_flags.Z, _d16()));
         OPCODE(0xCD, 24, 3, "CALL a16", _call(true, _d16()));
-        OPCODE(0xCE, 8, 2, "ADC a,d8", _adc(Register::A, _d8()));
+        OPCODE(0xCE, 8, 2, "ADC a,d8", _adc(_rA, _d8()));
         OPCODE(0xCF, 16, 1, "RST 08H", _rst(0x08));
         OPCODE(0xD0, 8, 1, "RET NC", _ret(!_flags.C));
-        OPCODE(0xD1, 12, 1, "POP DE", _pop(_D, _E));
+        OPCODE(0xD1, 12, 1, "POP DE", _pop(_rD, _rE));
         OPCODE(0xD2, 12, 0, "JP NC", _jp(!_flags.C, _d16()));
         OPCODE(0xD4, 12, 3, "CALL NC,a16", _call(!_flags.C, _d16()));
-        OPCODE(0xD5, 16, 1, "PUSH DE", _push(_D, _E));
-        OPCODE(0xD6, 8, 2, "SUB a,d8", _sub(Register::A, _d8()));
+        OPCODE(0xD5, 16, 1, "PUSH DE", _push(_rD, _rE));
+        OPCODE(0xD6, 8, 2, "SUB a,d8", _sub(_rA, _d8()));
         OPCODE(0xD7, 16, 1, "RST 10H", _rst(0x10));
         OPCODE(0xD8, 8, 1, "RET C", _ret(_flags.C));
         OPCODE(0xD9, 16, 1, "RETI", _ime = IME::Shadow; _ret(true));
         OPCODE(0xDA, 12, 3, "JP C,a16", _jp(_flags.C, _d16()));
         OPCODE(0xDC, 12, 3, "CALL C, a16", _call(_flags.C, _d16()));
-        OPCODE(0xDE, 8, 2, "SBC a,d8", _sbc(Register::A, _d8()));
+        OPCODE(0xDE, 8, 2, "SBC a,d8", _sbc(_rA, _d8()));
         OPCODE(0xDF, 16, 1, "RST 18H", _rst(0x18));
-        OPCODE(0xE0, 12, 2, "LDH (a8),A", _ldi(_a8(), Register::A));
-        OPCODE(0xE1, 12, 1, "POP HL", _pop(_H, _L));
-        OPCODE(0xE2, 8, 2, "LD (C), A", _ldi(0xff00 + _C, Register::A));
-        OPCODE(0xE5, 16, 1, "PUSH HL", _push(_H, _L));
-        OPCODE(0xE6, 8, 2, "AND d8", _and(Register::A, _d8()));
+        OPCODE(0xE0, 12, 2, "LDH (a8), A", _ldi(_a8(), _rA));
+        OPCODE(0xE1, 12, 1, "POP HL", _pop(_rH, _rL));
+        OPCODE(0xE2, 8, 2, "LD (C), A", _ldi(0xff00 + _rC, _rA));
+        OPCODE(0xE5, 16, 1, "PUSH HL", _push(_rH, _rL));
+        OPCODE(0xE6, 8, 2, "AND d8", _and(_rA, _d8()));
         OPCODE(0xE7, 16, 1, "RST 20H", _rst(0x20));
         OPCODE(0xE8, 16, 2, "ADD SP, r8", _addsp(_r8()));
-        OPCODE(0xE9, 4, 1, "JP (HL)", _jp(true, _HL));
-        OPCODE(0xEA, 16, 3, "LD (a16),A", _ldi(_d16(), Register::A));
-        OPCODE(0xEE, 16, 1, "XOR d8", _xor(Register::A, _d8()));
+        OPCODE(0xE9, 4, 1, "JP (HL)", _jp(true, _rHL));
+        OPCODE(0xEA, 16, 3, "LD (a16),A", _ldi(_d16(), _rA));
+        OPCODE(0xEE, 16, 1, "XOR d8", _xor(_rA, _d8()));
         OPCODE(0xEF, 16, 1, "RST 28H", _rst(0x28));
-        OPCODE(0xF0, 12, 2, "LDH A,(a8)", _ld(Register::A, _mem[_a8()]));
-        OPCODE(0xF1, 12, 1, "POP AF", _pop(_A, _F); _F &= 0xf0;);
-        OPCODE(0xF2, 8, 2, "LD A, (C)", _ld(Register::A, _mem[0xff00 + _C]));
+        OPCODE(0xF0, 12, 2, "LDH A,(a8)", _ld(_rA, _mem[_a8()]));
+        OPCODE(0xF1, 12, 1, "POP AF", _pop(_rA, _rF); _rF &= 0xf0;);
+        OPCODE(0xF2, 8, 2, "LD A, (C)", _ld(_rA, _mem[0xff00 + _rC]));
         OPCODE(0xF3, 4, 1, "DI", _ime = IME::Disabled;);
-        OPCODE(0xF5, 16, 1, "PUSH AF", _push(_A, _F));
-        OPCODE(0xF6, 8, 2, "OR d8", _or(Register::A, _d8()));
+        OPCODE(0xF5, 16, 1, "PUSH AF", _push(_rA, _rF));
+        OPCODE(0xF6, 8, 2, "OR d8", _or(_rA, _d8()));
         OPCODE(0xF7, 16, 1, "RST 30H", _rst(0x30));
         OPCODE(0xF8, 12, 2, "LD HL,SP+r8", _ldhlsp(_r8()));
-        OPCODE(0xF9, 8, 1, "LD SP,HL", _ldw(Register::SP, _HL));
-        OPCODE(0xFa, 16, 3, "LD A,(a16)", _ld(Register::A, _mem[_d16()]));
+        OPCODE(0xF9, 8, 1, "LD SP,HL", _ldw(_rSP, _rHL));
+        OPCODE(0xFa, 16, 3, "LD A,(a16)", _ld(_rA, _mem[_d16()]));
         OPCODE(0xFB, 4, 1, "EI", _ime = IME::Shadow;);
-        OPCODE(0xFE, 8, 2, "CP d8", _cp(_A, _d8()));
+        OPCODE(0xFE, 8, 2, "CP d8", _cp(_rA, _d8()));
         OPCODE(0xFF, 16, 1, "RST 38H", _rst(0x38));
     default:
         std::cout << "Unknown opcode: " << Print(op) << std::endl;
@@ -980,43 +950,43 @@ void Cpu::step(void)
 
 }
 
-void Cpu::set(Register r, wreg_t value)
+void Cpu::set(Register r, wreg_t arg)
 {
     switch (r) {
-    case Register::A: _A = value; break;
-    case Register::F: _F = value; break;
-    case Register::B: _B = value; break;
-    case Register::C: _C = value; break;
-    case Register::D: _D = value; break;
-    case Register::E: _E = value; break;
-    case Register::H: _H = value; break;
-    case Register::L: _L = value; break;
-    case Register::SP: _SP = value; break;
-    case Register::PC: _PC = value; break;
-    case Register::AF: _AF = value; break;
-    case Register::BC: _BC = value; break;
-    case Register::DE: _DE = value; break;
-    case Register::HL: _HL = value; break;
+    case Register::A: _rA = arg; break;
+    case Register::F: _rF = arg; break;
+    case Register::B: _rB = arg; break;
+    case Register::C: _rC = arg; break;
+    case Register::D: _rD = arg; break;
+    case Register::E: _rE = arg; break;
+    case Register::H: _rH = arg; break;
+    case Register::L: _rL = arg; break;
+    case Register::SP: _rSP = arg; break;
+    case Register::PC: _rPC = arg; break;
+    case Register::AF: _rAF = arg; break;
+    case Register::BC: _rBC = arg; break;
+    case Register::DE: _rDE = arg; break;
+    case Register::HL: _rHL = arg; break;
     }
 }
 
 wreg_t Cpu::get(Register r)
 {
     switch (r) {
-    case Register::A: return _A; break;
-    case Register::F: return _F; break;
-    case Register::B: return _B; break;
-    case Register::C: return _C; break;
-    case Register::D: return _D; break;
-    case Register::E: return _E; break;
-    case Register::H: return _H; break;
-    case Register::L: return _L; break;
-    case Register::SP: return _SP; break;
-    case Register::PC: return _PC; break;
-    case Register::AF: return _AF; break;
-    case Register::BC: return _BC; break;
-    case Register::DE: return _DE; break;
-    case Register::HL: return _HL; break;
+    case Register::A: return _rA; break;
+    case Register::F: return _rF; break;
+    case Register::B: return _rB; break;
+    case Register::C: return _rC; break;
+    case Register::D: return _rD; break;
+    case Register::E: return _rE; break;
+    case Register::H: return _rH; break;
+    case Register::L: return _rL; break;
+    case Register::SP: return _rSP; break;
+    case Register::PC: return _rPC; break;
+    case Register::AF: return _rAF; break;
+    case Register::BC: return _rBC; break;
+    case Register::DE: return _rDE; break;
+    case Register::HL: return _rHL; break;
     }
 }
 
@@ -1025,19 +995,19 @@ reg_t Cpu::get(addr_t addr)
     return _mem[addr];
 }
 
-void Cpu::set(addr_t addr, reg_t value)
+void Cpu::set(addr_t addr, reg_t arg)
 {
-    _mem[addr] = value;
+    _mem[addr] = arg;
 }
 
 void Cpu::_dump_reg(std::ostream &os) const
 {
-    os << "A: " << Print(_A) << " F: " << Print(_F)
-       << " B: " << Print(_B) << " C: " << Print(_C)
-       << " D: " << Print(_D) << " E: " << Print(_E) << std::endl
-       << "HL: " << Print(_HL)
-       << " PC: " << Print(_PC)
-       << " SP: " << Print(_SP) << std::endl;
+    os << "A: " << Print(_rA) << " F: " << Print(_rF)
+       << " B: " << Print(_rB) << " C: " << Print(_rC)
+       << " D: " << Print(_rD) << " E: " << Print(_rE) << std::endl
+       << "HL: " << Print(_rHL)
+       << " PC: " << Print(_rPC)
+       << " SP: " << Print(_rSP) << std::endl;
     switch (_ime) {
     case IME::Disabled:
         os << "IME: Disabled";
@@ -1055,33 +1025,33 @@ void Cpu::_dump_reg(std::ostream &os) const
 
 reg_t Cpu::load(reg_t op)
 {
-    _mem[_PC++] = op;
+    _mem[_rPC++] = op;
     return 1;
 }
 
 reg_t Cpu::load(reg_t op, reg_t arg)
 {
-    _mem[_PC++] = op;
-    _mem[_PC++] = arg;
+    _mem[_rPC++] = op;
+    _mem[_rPC++] = arg;
     return 1;
 }
 
 reg_t Cpu::load(reg_t op, reg_t arg1, reg_t arg2)
 {
-    _mem[_PC++] = op;
-    _mem[_PC++] = arg1;
-    _mem[_PC++] = arg2;
+    _mem[_rPC++] = op;
+    _mem[_rPC++] = arg1;
+    _mem[_rPC++] = arg2;
     return 1;
 }
 
 void Cpu::test_step(unsigned steps)
 {
-    _PC = 0;
+    _rPC = 0;
     for (unsigned i = 0; i < steps; i++)
         step();
 }
 
-void Cpu::_write(addr_t addr, reg_t value)
+void Cpu::_write(addr_t addr, reg_t arg)
 {
     if (addr >= 0xFF80) {
         // Internal RAM
@@ -1090,10 +1060,10 @@ void Cpu::_write(addr_t addr, reg_t value)
         switch (addr) {
         case CtrlReg::KEYS:
             // copy current keys
-            if ((value & 0x10) == 0)
-                value = (value & 0xF0) | _control->get_arrows();
-            else if ((value & 0x20) == 0)
-                value = (value & 0xF0) | _control->get_buttons();
+            if ((arg & 0x10) == 0)
+                arg = (arg & 0xF0) | _control->get_arrows();
+            else if ((arg & 0x20) == 0)
+                arg = (arg & 0xF0) | _control->get_buttons();
             break;
         case CtrlReg::DMG_RESET:
             // Nuke the DMG ROM
@@ -1102,7 +1072,7 @@ void Cpu::_write(addr_t addr, reg_t value)
         case CtrlReg::DMA: {
             // Start the DMA transfer
             addr_t dest = Mem::OAMTable;
-            addr_t src = (addr_t)value << 8;
+            addr_t src = (addr_t)arg << 8;
             memcpy(&_mem[dest], &_mem[src], 40*4);
             break;
         }
@@ -1119,7 +1089,7 @@ void Cpu::_write(addr_t addr, reg_t value)
         // Internal RAM
         // XXX: his should be 0xDE00
         if (addr <= 0xCE00)
-            _mem[addr + 0x2000] = value;
+            _mem[addr + 0x2000] = arg;
     } else if (addr >= 0xA000) {
         // switchable RAM bank
     } else if (addr >= 0x8000) {
@@ -1129,10 +1099,10 @@ void Cpu::_write(addr_t addr, reg_t value)
     } else if (addr >= 0x4000) {
         return;
     } else if (addr >= 0x2000) {
-        value &= 0x1f;
-        if (value == 0)
-            value = 1;
-        unsigned rom_addr = value * 0x4000;
+        arg &= 0x1f;
+        if (arg == 0)
+            arg = 1;
+        unsigned rom_addr = arg * 0x4000;
         if (_debug)
             std::cout << " loading " << Print(rom_addr);
         if (rom_addr < _rom.size())
@@ -1141,7 +1111,7 @@ void Cpu::_write(addr_t addr, reg_t value)
     } else {
         return;
     }
-    _mem[addr] = value;
+    _mem[addr] = arg;
 }
 
 /*
@@ -1155,16 +1125,16 @@ void Cpu::_write(addr_t addr, reg_t value)
 
 void Cpu::reset(void)
 {
-    _A = 0x01;
-    _F = 0xB0;
-    _B = 0x00;
-    _C = 0x13;
-    _D = 0x00;
-    _E = 0xD8;
-    _H = 0x01;
-    _L = 0x4D;
-    _SP = 0xFFFE;
-    _PC = 0x0000;
+    _rA = 0x01;
+    _rF = 0xB0;
+    _rB = 0x00;
+    _rC = 0x13;
+    _rD = 0x00;
+    _rE = 0xD8;
+    _rH = 0x01;
+    _rL = 0x4D;
+    _rSP = 0xFFFE;
+    _rPC = 0x0000;
 
     memset(&_mem[0], 0, _mem.size());
     _mem[CtrlReg::TIMA] = 0x00;
@@ -1211,7 +1181,7 @@ void Cpu::reset(void)
         _read_rom("boot_dmg.gb", boot);
         memcpy(&_mem[0x0000], &boot[0], boot.size());
     } catch (RomException &e) {
-        _PC = 0x0100;
+        _rPC = 0x0100;
     }
 
     // Cartridge Header
@@ -1296,8 +1266,8 @@ void Cpu::interrupt(void)
     reg_t enabled = _mem[CtrlReg::IE];
     for (unsigned i = 0; i < 5; i++) {
         if (bit_isset(flags, i) && bit_isset(enabled, i)) {
-            _push(_PCh, _PCl);
-            _PC = InterruptVector[i];
+            _push(_rPCh, _rPCl);
+            _rPC = InterruptVector[i];
             if (_debug)
                 std::cout << " Interrupt Triggered: " << i << std::endl;
             bit_set(_mem[CtrlReg::IF], i, false);
