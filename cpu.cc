@@ -88,9 +88,9 @@ bool Cpu::operator == (const Cpu &rhs) const
     EQ(_rSP, rhs._rSP);
     EQ(_rPC, rhs._rPC);
     for (unsigned i = 0; i < _mem.size(); i++)
-        if (_mem[i] != rhs._mem[i]) {
+        if (_read(i) != rhs._read(i)) {
             std::cout << "Memory differences at: " << Print(i) << std::endl;
-            EQ(_mem[i], rhs._mem[i]);
+            EQ(_read(i), rhs._read(i));
         }
     return true;
 }
@@ -105,7 +105,7 @@ bool Cpu::operator == (const Cpu &rhs) const
  *      |_|
  */
 
-byte_t &Cpu::_fetch(Register reg)
+byte_t Cpu::_fetch(Register reg)
 {
     switch (reg) {
         case Register::A: return _rA;
@@ -115,10 +115,25 @@ byte_t &Cpu::_fetch(Register reg)
         case Register::E: return _rE;
         case Register::H: return _rH;
         case Register::L: return _rL;
-        case Register::HL: return _mem[_rHL];
+        case Register::HL: return _read(_rHL);
         default: throw CpuException();
     }
     throw CpuException();
+}
+
+void Cpu::_store(Register reg, byte_t value)
+{
+    switch (reg) {
+        case Register::A: _rA = value; break;
+        case Register::B: _rB = value; break;
+        case Register::C: _rC = value; break;
+        case Register::D: _rD = value; break;
+        case Register::E: _rE = value; break;
+        case Register::H: _rH = value; break;
+        case Register::L: _rL = value; break;
+        case Register::HL: _write(_rHL, value); break;
+        default: throw CpuException();
+    }
 }
 
 void Cpu::_add(byte_t &dest, byte_t arg)
@@ -142,6 +157,15 @@ void Cpu::_inc(byte_t &dest)
     _set_nflag(false);
 
     dest = result;
+}
+
+void Cpu::_inci(addr_t addr)
+{
+    byte_t dest = _read(addr);
+
+    _inc(dest);
+
+    _write(addr, dest);
 }
 
 void Cpu::_adc(byte_t &dest, byte_t arg)
@@ -177,6 +201,15 @@ void Cpu::_dec(byte_t &dest)
     _set_nflag(true);
 
     dest = result;
+}
+
+void Cpu::_deci(addr_t addr)
+{
+    byte_t dest = _read(addr);
+
+    _dec(dest);
+
+    _write(addr, dest);
 }
 
 void Cpu::_sbc(byte_t &dest, byte_t arg)
@@ -246,7 +279,7 @@ void Cpu::_ld(byte_t &dest, byte_t arg)
     dest = result;
 }
 
-void Cpu::_bit(byte_t &dest, int bit)
+void Cpu::_bit(byte_t dest, int bit)
 {
     byte_t result = dest & (1 << bit);
 
@@ -393,29 +426,34 @@ void Cpu::prefix_cb(void)
 {
     byte_t op = _d8();
     int bit = (op & 0x38) >> 3;
-    byte_t &dest = _fetch(Register(op & 0x7));
-    if ((op & 0xF8) == 0x00) {
-        _rlc(dest);
-    } else if ((op & 0xF8) == 0x08) {
-        _rrc(dest);
-    } else if ((op & 0xF8) == 0x10) {
-        _rl(dest);
-    } else if ((op & 0xF8) == 0x18) {
-        _rr(dest);
-    } else if ((op & 0xF8) == 0x20) {
-        _sla(dest);
-    } else if ((op & 0xF8) == 0x28) {
-        _sra(dest);
-    } else if ((op & 0xF8) == 0x30) {
-        _swap(dest);
-    } else if ((op & 0xF8) == 0x38) {
-        _srl(dest);
+    byte_t dest = _fetch(Register(op & 0x07));
+    if ((op & 0xC0) == 0x00) {
+        if ((op & 0xF8) == 0x00) {
+            _rlc(dest);
+        } else if ((op & 0xF8) == 0x08) {
+            _rrc(dest);
+        } else if ((op & 0xF8) == 0x10) {
+            _rl(dest);
+        } else if ((op & 0xF8) == 0x18) {
+            _rr(dest);
+        } else if ((op & 0xF8) == 0x20) {
+            _sla(dest);
+        } else if ((op & 0xF8) == 0x28) {
+            _sra(dest);
+        } else if ((op & 0xF8) == 0x30) {
+            _swap(dest);
+        } else if ((op & 0xF8) == 0x38) {
+            _srl(dest);
+        }
+        _store(Register(op & 0x07), dest);
     } else if ((op & 0xC0) == 0x40) {
         _bit(dest, bit);
     } else if ((op & 0xC0) == 0x80) {
         _reset(dest, bit);
+        _store(Register(op & 0x07), dest);
     } else if ((op & 0xC0) == 0xC0) {
         _set(dest, bit);
+        _store(Register(op & 0x07), dest);
     }
 }
 
@@ -483,8 +521,8 @@ void Cpu::_push(byte_t high, byte_t low)
 
 void Cpu::_pop(byte_t &high, byte_t &low)
 {
-    low = _mem[_rSP++];
-    high = _mem[_rSP++];
+    low = _read(_rSP++);
+    high = _read(_rSP++);
     if (_debug) {
         word_t arg = high;
         arg = arg << 8 | low;
@@ -516,7 +554,7 @@ void Cpu::dump(void)
     _dump_reg(std::cout);
 }
 
-word_t &Cpu::_fetchw(Register reg)
+word_t Cpu::_fetchw(Register reg)
 {
     switch (reg) {
         case Register::BC: return _rBC;
@@ -673,7 +711,7 @@ void Cpu::_daa(void)
 void Cpu::dispatch(void)
 {
     word_t pc = _rPC;
-    byte_t op = _mem[_rPC++];
+    byte_t op = _read(_rPC++);
     //Register src = Register(op & 0x7);
     //Register dest = Register((op & 0x38) >> 3);
 
@@ -720,7 +758,7 @@ void Cpu::dispatch(void)
         OPCODE(0x27, 4, 1, "DAA", _daa());
         OPCODE(0x28, 8, 2, "JR Z,r8", _jr(_flags.Z, _r8()));
         OPCODE(0x29, 8, 1, "ADD HL,HL", _addw(_rHL, _rHL));
-        OPCODE(0x2A, 8, 1, "LDI a, (HL)", _ld(_rA, _mem[_rHL++]));
+        OPCODE(0x2A, 8, 1, "LDI a, (HL)", _ld(_rA, _read(_rHL++)));
         OPCODE(0x2B, 8, 1, "DEC HL", _decw(_rHL));
         OPCODE(0x2C, 4, 1, "INC L", _inc(_rL));
         OPCODE(0x2D, 4, 1, "DEC L", _dec(_rL));
@@ -730,13 +768,13 @@ void Cpu::dispatch(void)
         OPCODE(0x31, 12, 3, "LD SP,d16", _ldw(_rSP, _d16()));
         OPCODE(0x32, 8, 1, "LDD (HL), A", _ldi(_rHL--, _rA));
         OPCODE(0x33, 8, 1, "INC SP", _incw(_rSP));
-        OPCODE(0x34, 12, 1, "INC (HL)", _inc(_read(_rHL)));
-        OPCODE(0x35, 12, 1, "DEC (HL)", _dec(_read(_rHL)));
+        OPCODE(0x34, 12, 1, "INC (HL)", _inci(_rHL));
+        OPCODE(0x35, 12, 1, "DEC (HL)", _deci(_rHL));
         OPCODE(0x36, 8, 2, "LD (HL),d8", _ldi(_rHL, _d8()));
         OPCODE(0x37, 4, 1, "SCF", _scf());
         OPCODE(0x38, 8 ,2, "JR C,r8", _jr(_flags.C, _r8()));
         OPCODE(0x39, 8, 1, "ADD HL,SP", _addw(_rHL, _rSP));
-        OPCODE(0x3A, 8, 1, "LD A, (HL-)", _ld(_rA, _mem[_rHL--]));
+        OPCODE(0x3A, 8, 1, "LD A, (HL-)", _ld(_rA, _read(_rHL--)));
         OPCODE(0x3B, 8, 1, "DEC SP", _decw(_rSP));
         OPCODE(0x3C, 4, 1, "INC A", _inc(_rA));
         OPCODE(0x3D, 4, 1, "DEC A", _dec(_rA));
@@ -910,16 +948,16 @@ void Cpu::dispatch(void)
         OPCODE(0xEA, 16, 3, "LD (a16),A", _ldi(_d16(), _rA));
         OPCODE(0xEE, 16, 1, "XOR d8", _xor(_rA, _d8()));
         OPCODE(0xEF, 16, 1, "RST 28H", _rst(0x28));
-        OPCODE(0xF0, 12, 2, "LDH A,(a8)", _ld(_rA, _mem[_a8()]));
+        OPCODE(0xF0, 12, 2, "LDH A,(a8)", _ld(_rA, _read(_a8())));
         OPCODE(0xF1, 12, 1, "POP AF", _pop(_rA, _rF); _rF &= 0xf0;);
-        OPCODE(0xF2, 8, 2, "LD A, (C)", _ld(_rA, _mem[0xff00 + _rC]));
+        OPCODE(0xF2, 8, 2, "LD A, (C)", _ld(_rA, _read(0xff00 + _rC)));
         OPCODE(0xF3, 4, 1, "DI", _ime = IME::Disabled;);
         OPCODE(0xF5, 16, 1, "PUSH AF", _push(_rA, _rF));
         OPCODE(0xF6, 8, 2, "OR d8", _or(_rA, _d8()));
         OPCODE(0xF7, 16, 1, "RST 30H", _rst(0x30));
         OPCODE(0xF8, 12, 2, "LD HL,SP+r8", _ldhlsp(_r8()));
         OPCODE(0xF9, 8, 1, "LD SP,HL", _ldw(_rSP, _rHL));
-        OPCODE(0xFa, 16, 3, "LD A,(a16)", _ld(_rA, _mem[_d16()]));
+        OPCODE(0xFa, 16, 3, "LD A,(a16)", _ld(_rA, _read(_d16())));
         OPCODE(0xFB, 4, 1, "EI", _ime = IME::Shadow;);
         OPCODE(0xFE, 8, 2, "CP d8", _cp(_rA, _d8()));
         OPCODE(0xFF, 16, 1, "RST 38H", _rst(0x38));
@@ -995,12 +1033,12 @@ word_t Cpu::get(Register r)
 
 byte_t Cpu::get(addr_t addr)
 {
-    return _mem[addr];
+    return _read(addr);
 }
 
 void Cpu::set(addr_t addr, byte_t arg)
 {
-    _mem[addr] = arg;
+    _write(addr, arg);
 }
 
 void Cpu::_dump_reg(std::ostream &os) const
@@ -1028,30 +1066,35 @@ void Cpu::_dump_reg(std::ostream &os) const
 
 byte_t Cpu::load(byte_t op)
 {
-    _mem[_rPC++] = op;
+    _write(_rPC++, op);
     return 1;
 }
 
 byte_t Cpu::load(byte_t op, byte_t arg)
 {
-    _mem[_rPC++] = op;
-    _mem[_rPC++] = arg;
+    _write(_rPC++, op);
+    _write(_rPC++, arg);
     return 1;
 }
 
 byte_t Cpu::load(byte_t op, byte_t arg1, byte_t arg2)
 {
-    _mem[_rPC++] = op;
-    _mem[_rPC++] = arg1;
-    _mem[_rPC++] = arg2;
+    _write(_rPC++, op);
+    _write(_rPC++, arg1);
+    _write(_rPC++, arg2);
     return 1;
 }
 
 void Cpu::test_step(unsigned steps)
 {
-    _rPC = 0;
+    _rPC = 0xD000;
     for (unsigned i = 0; i < steps; i++)
         step();
+}
+
+byte_t Cpu::_read(addr_t addr) const
+{
+    return _mem[addr];
 }
 
 void Cpu::_write(addr_t addr, byte_t arg)
@@ -1142,38 +1185,39 @@ void Cpu::reset(void)
     _rPC = 0x0000;
 
     memset(&_mem[0], 0, _mem.size());
-    _mem[CtrlReg::TIMA] = 0x00;
-    _mem[CtrlReg::TMA]  = 0x00;
-    _mem[CtrlReg::TAC]  = 0x00;
-    _mem[SoundReg::NR10] = 0x80;
-    _mem[SoundReg::NR11] = 0xBF;
-    _mem[SoundReg::NR12] = 0xF3;
-    _mem[SoundReg::NR14] = 0xBF;
-    _mem[SoundReg::NR21] = 0x3F;
-    _mem[SoundReg::NR22] = 0x00;
-    _mem[SoundReg::NR24] = 0xBF;
-    _mem[SoundReg::NR30] = 0x7F;
-    _mem[SoundReg::NR31] = 0xFF;
-    _mem[SoundReg::NR32] = 0x9F;
-    _mem[SoundReg::NR33] = 0xBF;
-    _mem[SoundReg::NR41] = 0xFF;
-    _mem[SoundReg::NR42] = 0x00;
-    _mem[SoundReg::NR43] = 0x00;
-    _mem[SoundReg::NR44] = 0xBF;
-    _mem[SoundReg::NR50] = 0x77;
-    _mem[SoundReg::NR51] = 0xF3;
-    _mem[SoundReg::NR52] = 0xF1;
-    _mem[CtrlReg::LCDC] = 0x91;
-    _mem[CtrlReg::SCY]  = 0x00;
-    _mem[CtrlReg::SCX]  = 0x00;
-    _mem[CtrlReg::LYC]  = 0x00;
-    _mem[CtrlReg::BGP]  = 0xFC;
-    _mem[CtrlReg::OBP0] = 0xFF;
-    _mem[CtrlReg::OBP1] = 0xFF;
-    _mem[CtrlReg::WY]   = 0x00;
-    _mem[CtrlReg::WX]   = 0x00;
-    _mem[CtrlReg::IF]   = 0x00;
-    _mem[CtrlReg::IE]   = 0x00;
+
+    _write(CtrlReg::TIMA, 0x00);
+    _write(CtrlReg::TMA, 0x00);
+    _write(CtrlReg::TAC, 0x00);
+    _write(SoundReg::NR10, 0x80);
+    _write(SoundReg::NR11, 0xBF);
+    _write(SoundReg::NR12, 0xF3);
+    _write(SoundReg::NR14, 0xBF);
+    _write(SoundReg::NR21, 0x3F);
+    _write(SoundReg::NR22, 0x00);
+    _write(SoundReg::NR24, 0xBF);
+    _write(SoundReg::NR30, 0x7F);
+    _write(SoundReg::NR31, 0xFF);
+    _write(SoundReg::NR32, 0x9F);
+    _write(SoundReg::NR33, 0xBF);
+    _write(SoundReg::NR41, 0xFF);
+    _write(SoundReg::NR42, 0x00);
+    _write(SoundReg::NR43, 0x00);
+    _write(SoundReg::NR44, 0xBF);
+    _write(SoundReg::NR50, 0x77);
+    _write(SoundReg::NR51, 0xF3);
+    _write(SoundReg::NR52, 0xF1);
+    _write(CtrlReg::LCDC, 0x91);
+    _write(CtrlReg::SCY, 0x00);
+    _write(CtrlReg::SCX, 0x00);
+    _write(CtrlReg::LYC, 0x00);
+    _write(CtrlReg::BGP, 0xFC);
+    _write(CtrlReg::OBP0, 0xFF);
+    _write(CtrlReg::OBP1, 0xFF);
+    _write(CtrlReg::WY, 0x00);
+    _write(CtrlReg::WX, 0x00);
+    _write(CtrlReg::IF, 0x00);
+    _write(CtrlReg::IE, 0x00);
 
     _audio->sound(&_mem[0]);
 
@@ -1194,14 +1238,14 @@ void Cpu::reset(void)
     // Cartridge Header
     _name.clear();
     for (unsigned i = 0x0134; i < 0x0142; i++)
-        _name += _mem[i];
+        _name += _read(i);
 
-    if ((_mem[0x0143] & 0xC0) == 0xC0)
+    if ((_read(0x0143) & 0xC0) == 0xC0)
         std::cout << "Color Gameboy Only" << std::endl;
 
-    _type = static_cast<Cartridge>(_mem[0x0147]);
-    _rom_size = static_cast<RomSize>(_mem[0x0148]);
-    _ram_size = static_cast<RamSize>(_mem[0x0149]);
+    _type = static_cast<Cartridge>(_read(0x0147));
+    _rom_size = static_cast<RomSize>(_read(0x0148));
+    _ram_size = static_cast<RamSize>(_read(0x0149));
 }
 
 void Cpu::load_rom(const std::string &name)
@@ -1258,7 +1302,7 @@ addr_t InterruptVector[] = {
  */
 void Cpu::interrupt(void)
 {
-    byte_t flags = _mem[CtrlReg::IF];
+    byte_t flags = _read(CtrlReg::IF);
     if (_ime == IME::Disabled) {
         if (_state == State::Halted)
             for (unsigned i = 0; i < 5; i++)
@@ -1270,14 +1314,15 @@ void Cpu::interrupt(void)
         _ime = IME::Enabled;
         return;
     }
-    byte_t enabled = _mem[CtrlReg::IE];
+    byte_t enabled = _read(CtrlReg::IE);
     for (unsigned i = 0; i < 5; i++) {
         if (bit_isset(flags, i) && bit_isset(enabled, i)) {
             _push(_rPCh, _rPCl);
             _rPC = InterruptVector[i];
             if (_debug)
                 std::cout << " Interrupt Triggered: " << i << std::endl;
-            bit_set(_mem[CtrlReg::IF], i, false);
+            bit_set(flags, i, false);
+            _write(CtrlReg::IF, flags);
             _tick(20);
             _ime = IME::Disabled;
             _state = State::Running;
@@ -1293,8 +1338,8 @@ void Cpu::audio(void)
 
 void Cpu::video(void)
 {
-    byte_t &stat = _mem[CtrlReg::STAT];
-    byte_t &ly = _mem[CtrlReg::LY];
+    byte_t stat = _read(CtrlReg::STAT);
+    byte_t ly = _read(CtrlReg::LY);
 
     switch (stat & 0x03) {
     case LCDMode::HBlankMode:
@@ -1303,14 +1348,16 @@ void Cpu::video(void)
             _fcycles -= H_BLANK_CYCLES;
 
             ly = (ly + 1) % SCANLINES;
+            _write(CtrlReg::LY, ly);
             if (ly == DISPLAY_LINES) {
                 // Wait until our frame is finished
                 _video->render(&_mem[0]);
-                bit_set(_mem[CtrlReg::IF], Interrupt::VBlank, true);
+                _trigger(Interrupt::VBlank);
                 stat = (stat & 0xfc) | LCDMode::VBlankMode;
             } else {
                 stat = (stat & 0xfc) | LCDMode::OAMMode;
             }
+            _write(CtrlReg::STAT, stat);
         }
         break;
     case LCDMode::OAMMode:
@@ -1318,6 +1365,7 @@ void Cpu::video(void)
             // Transition to Active
             _fcycles -= OAM_CYCLES;
             stat = (stat & 0xfc) | LCDMode::ActiveMode;
+            _write(CtrlReg::STAT, stat);
         }
         break;
     case LCDMode::ActiveMode:
@@ -1325,6 +1373,7 @@ void Cpu::video(void)
             // Transition to HBlank
             _fcycles -= ACTIVE_CYCLES;
             stat = (stat & 0xfc) | LCDMode::HBlankMode;
+            _write(CtrlReg::STAT, stat);
         }
         break;
     case LCDMode::VBlankMode:
@@ -1332,6 +1381,7 @@ void Cpu::video(void)
             // Transition to OAM
             _fcycles -= V_BLANK_CYCLES;
             stat = (stat & 0xfc) | LCDMode::OAMMode;
+            _write(CtrlReg::STAT, stat);
         }
         break;
     }
@@ -1348,10 +1398,10 @@ void Cpu::timer(void)
 {
     if (_dcycles > 256) {
         _dcycles -= 256;
-        _mem[CtrlReg::DIV]++;
+        _write(CtrlReg::DIV, _read(CtrlReg::DIV)+1);
         // Divider register triggerd
     }
-    byte_t &tac = _mem[CtrlReg::TAC];
+    byte_t tac = _read(CtrlReg::TAC);
     if (tac & 0x04) {
         unsigned limit = 1024;
         switch (tac & 0x3) {
@@ -1361,15 +1411,16 @@ void Cpu::timer(void)
         case 3: limit = 256; break;
         }
         if (_tcycles > limit) {
-            byte_t &tima = _mem[CtrlReg::TIMA];
+            byte_t tima = _read(CtrlReg::TIMA);
             _tcycles -= limit;
             if (tima == 0xff) {
                 // Trigger the interrupt
-                bit_set(_mem[CtrlReg::IF], Interrupt::Timer, true);
+                _trigger(Interrupt::Timer);
                 // Reset the overflow
-                tima = _mem[CtrlReg::TMA];
+                tima = _read(CtrlReg::TMA);
             } else
                 tima++;
+            _write(CtrlReg::TIMA, tima);
         }
     }
 }

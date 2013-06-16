@@ -327,11 +327,18 @@ protected:
     void timer();
     void audio();
 
+    inline void _trigger(Interrupt i) {
+        byte_t ifreg = _read(CtrlReg::IF);
+        bit_set(ifreg, i, true);
+        _write(CtrlReg::IF, ifreg);
+    };
+
     /* Addition */
     void _add(byte_t &orig, byte_t value);
     void _adc(byte_t &orig, byte_t value);
     void _addw(word_t &worig, word_t value);
     void _inc(byte_t &orig);
+    void _inci(addr_t addr);
     void _incw(word_t &worig);
 
     /* Subtraction */
@@ -339,6 +346,7 @@ protected:
     void _subw(word_t &worig, word_t value);
     void _sbc(byte_t &orig, byte_t value);
     void _dec(byte_t &orig);
+    void _deci(addr_t addr);
     void _decw(word_t &worig);
 
     /* Load */
@@ -351,7 +359,7 @@ protected:
     void _and(byte_t &orig, byte_t value);
     void _xor(byte_t &orig, byte_t value);
     void _or(byte_t &orig, byte_t value);
-    void _bit(byte_t &orig, int bit);
+    void _bit(byte_t orig, int bit);
     void _reset(byte_t &orig, int bit);
     void _set(byte_t &orig, int bit);
     void _swap(byte_t &orig);
@@ -389,12 +397,11 @@ protected:
     void _pop(word_t &arg);
 
     /* Store/Load */
-    byte_t &_fetch(Register reg);
-    word_t &_fetchw(Register reg);
+    byte_t _fetch(Register reg);
+    void _store(Register reg, byte_t value);
+    word_t _fetchw(Register reg);
     void _write(addr_t addr, byte_t value);
-    byte_t &_read(addr_t addr) {
-        return _mem[addr];
-    }
+    byte_t _read(addr_t addr) const;
     inline void _tick(unsigned cycles) {
         _cycles += cycles;
         _fcycles += cycles;
@@ -417,28 +424,28 @@ protected:
 
     /* decode accessors */
     inline word_t _d16(void) {
-        word_t tmp = _mem[_rPC] | (_mem[_rPC+1] << 8);
+        word_t tmp = _read(_rPC) | (_read(_rPC+1) << 8);
         if (_debug)
             std::cout << " d(" << Print(tmp) << ")";
         _rPC+=2;
         return tmp;
     }
     inline byte_t _d8(void) {
-        byte_t tmp = _mem[_rPC];
+        byte_t tmp = _read(_rPC);
         if (_debug)
             std::cout << " d(" << Print(tmp) << ")";
         _rPC++;
         return tmp;
     }
     inline byte_t _r8(void) {
-        byte_t tmp = _mem[_rPC];
+        byte_t tmp = _read(_rPC);
         if (_debug)
             std::cout << " r(" << Print(tmp) << ")";
         _rPC++;
         return tmp;
     }
     inline word_t _a8(void) {
-        word_t tmp = _mem[_rPC] + 0xff00;
+        word_t tmp = _read(_rPC) + 0xff00;
         if (_debug)
             std::cout << " a(" << Print(tmp) << ")";
         _rPC++;

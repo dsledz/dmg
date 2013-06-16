@@ -105,6 +105,7 @@ TEST(BitOps, set)
 TEST(DMGOpcodes, Nop)
 {
     Cpu cpu, expect;
+    cpu.set(Register::PC, 0xD000);
     cpu.load(Opcode::NOP);
 
     expect = cpu;
@@ -116,6 +117,7 @@ TEST(DMGOpcodes, Nop)
 TEST(DMGOpcodes, IncA)
 {
     Cpu cpu, expect;
+    cpu.set(Register::PC, 0xD000);
     cpu.load(Opcode::INC_A);
 
     expect = cpu;
@@ -128,6 +130,7 @@ TEST(DMGOpcodes, IncA)
 TEST(DMGOpcodes, AddAB)
 {
     Cpu cpu, expect;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::B, 6);
     cpu.load(Opcode::ADD_A_B);
 
@@ -141,6 +144,7 @@ TEST(DMGOpcodes, AddAB)
 TEST(DMGOpcodes, LdBB)
 {
     Cpu cpu, expect;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::B, 8);
     cpu.load(Opcode::LD_B_B);
 
@@ -153,6 +157,7 @@ TEST(DMGOpcodes, LdBB)
 TEST(DMGOpcodes, IncBC)
 {
     Cpu cpu, expect;
+    cpu.set(Register::PC, 0xD000);
     cpu.load(Opcode::INC_BC);
 
     expect = cpu;
@@ -171,6 +176,7 @@ TEST(DMGOpcodes, Mem)
 TEST(DMGOpcodes, LdBC_A)
 {
     Cpu cpu, expect;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::A, 10);
     cpu.set(Register::BC, 0xC234);
     cpu.load(Opcode::LD_BC_A);
@@ -187,6 +193,7 @@ TEST(DMGOpcodes, AndB)
 {
     Cpu cpu, expect;
 
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::A, 0x1);
     cpu.set(Register::B, 0x0);
     cpu.load(Opcode::AND_B);
@@ -202,12 +209,12 @@ TEST(DMGOpcodes, AndB)
 TEST(DMGOpcodes, LDSP_d16)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.load(Opcode::LD_SP_d16, 0xfe, 0xff);
 
     Cpu expect = cpu;
 
     expect.set(Register::SP, 0xfffe);
-    expect.set(Register::PC, 3);
 
     cpu.test_step(1);
     EXPECT_EQ(expect, cpu);
@@ -216,13 +223,13 @@ TEST(DMGOpcodes, LDSP_d16)
 TEST(DMGOpcodes, ldd)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.load(Opcode::LD_HL_d16, 0xff, 0x9f);
     cpu.load(Opcode::LDD_HL_A);
     cpu.load(Opcode::LDD_HL_A);
     cpu.load(Opcode::LDD_HL_A);
 
     Cpu expect = cpu;
-    expect.set(Register::PC, 6);
     expect.set(Register::HL, 0x9ffc);
 
     cpu.test_step(4);
@@ -233,6 +240,7 @@ TEST(DMGOpcodes, sp_hl_sp)
 {
     Cpu cpu;
 
+    cpu.set(Register::PC, 0xD000);
     cpu.load(Opcode::LD_HL_SP_r8, 0xfe);
     cpu.set(Register::SP, 0xd000);
 
@@ -246,6 +254,7 @@ TEST(DMGOpcodes, sp_hl_sp)
 TEST(DMGOpcodes, ldd_loop)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.load(Opcode::LD_SP_d16, 0xfe, 0xff);
     cpu.load(Opcode::XOR_A);
     cpu.load(Opcode::LD_HL_d16, 0xff, 0x9f);
@@ -266,6 +275,7 @@ TEST(DMGOpcodes, ldd_loop)
 TEST(DMGOpcodes, add_sp)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::SP, 0x8000);
     cpu.load(0xE8, 0xFF);
 
@@ -281,6 +291,7 @@ TEST(DMGOpcodes, add_sp)
 TEST(DMGOpcodes, add_sp2)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::SP, 0xffff);
     cpu.load(0xE8, 0x01);
 
@@ -292,12 +303,14 @@ TEST(DMGOpcodes, add_sp2)
 
     EXPECT_EQ(expect, cpu);
 }
+
 TEST(DMGOpcodes, ld_a_de)
 {
     Cpu cpu;
-    cpu.set(Register::D, 0x01);
-    cpu.set(Register::E, 0x04);
-    cpu.set(0x0104, 0xCC);
+    cpu.set(Register::PC, 0xD000);
+    cpu.set(Register::D, 0xC0);
+    cpu.set(Register::E, 0x00);
+    cpu.set(0xC000, 0xCC);
     cpu.load(Opcode::LD_A_DE);
 
     Cpu expect = cpu;
@@ -310,6 +323,7 @@ TEST(DMGOpcodes, ld_a_de)
 TEST(DMGOpcodes, popAF)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::BC, 0x1200);
     cpu.set(Register::SP, 0xff90);
 
@@ -328,6 +342,7 @@ TEST(DMGOpcodes, popAF)
 TEST(DMGOpcodes, push)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::BC, 0x1301);
     cpu.set(Register::SP, 0xff90);
 
@@ -352,6 +367,7 @@ TEST(DMGOpcodes, push)
 TEST(DMGOpcodes, daa)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::A, 0x64);
     cpu.set(Register::B, 0x46);
 
@@ -370,6 +386,7 @@ TEST(DMGOpcodes, daa)
 TEST(DMGOpcodes, cpl)
 {
     Cpu cpu;
+    cpu.set(Register::PC, 0xD000);
     cpu.set(Register::A, 0xAA);
     cpu.load(Opcode::CPL);
 
@@ -382,21 +399,6 @@ TEST(DMGOpcodes, cpl)
 }
 
 // Execute flow
-TEST(DMGTest, Load)
-{
-    Cpu cpu;
-    cpu.reset();
-
-    Cpu expect = cpu;
-    cpu.test_step(1);
-
-    expect.set(Register::PC, 0x3);
-
-    EXPECT_EQ(expect, cpu);
-
-    cpu.test_step(1);
-}
-
 TEST(DMGTest, Step)
 {
     Cpu cpu, expect;
