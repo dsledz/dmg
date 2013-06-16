@@ -43,7 +43,10 @@ using namespace DMG;
 Cpu::Cpu(void): _rAF(0), _rBC(0), _rDE(0), _rHL(0), _rSP(0), _rPC(0),
     _ime(IME::Disabled), _state(State::Running),
     _cycles(0), _fcycles(0), _dcycles(0), _tcycles(0),
-    _video(&_null_video), _control(&_null_controller), _debug(false)
+    _video(&_null_video),
+    _control(&_null_controller),
+    _audio(&_null_audio),
+    _debug(false)
 {
     _mem.resize(MEM_SIZE);
     _rom.resize(0);
@@ -1077,6 +1080,8 @@ void Cpu::_write(addr_t addr, reg_t arg)
             break;
         }
         default:
+            if (addr >= SoundRegStart && addr <= SoundRegEnd)
+                _audio->set(addr, arg);
             break;
         }
     } else if (addr >= 0xFEA0) {
@@ -1140,24 +1145,24 @@ void Cpu::reset(void)
     _mem[CtrlReg::TIMA] = 0x00;
     _mem[CtrlReg::TMA]  = 0x00;
     _mem[CtrlReg::TAC]  = 0x00;
-    _mem[CtrlReg::NR10] = 0x80;
-    _mem[CtrlReg::NR11] = 0xBF;
-    _mem[CtrlReg::NR12] = 0xF3;
-    _mem[CtrlReg::NR14] = 0xBF;
-    _mem[CtrlReg::NR21] = 0x3F;
-    _mem[CtrlReg::NR22] = 0x00;
-    _mem[CtrlReg::NR24] = 0xBF;
-    _mem[CtrlReg::NR30] = 0x7F;
-    _mem[CtrlReg::NR31] = 0xFF;
-    _mem[CtrlReg::NR32] = 0x9F;
-    _mem[CtrlReg::NR33] = 0xBF;
-    _mem[CtrlReg::NR41] = 0xFF;
-    _mem[CtrlReg::NR42] = 0x00;
-    _mem[CtrlReg::NR43] = 0x00;
-    _mem[CtrlReg::NR44] = 0xBF;
-    _mem[CtrlReg::NR50] = 0x77;
-    _mem[CtrlReg::NR51] = 0xF3;
-    _mem[CtrlReg::NR52] = 0xF1;
+    _mem[SoundReg::NR10] = 0x80;
+    _mem[SoundReg::NR11] = 0xBF;
+    _mem[SoundReg::NR12] = 0xF3;
+    _mem[SoundReg::NR14] = 0xBF;
+    _mem[SoundReg::NR21] = 0x3F;
+    _mem[SoundReg::NR22] = 0x00;
+    _mem[SoundReg::NR24] = 0xBF;
+    _mem[SoundReg::NR30] = 0x7F;
+    _mem[SoundReg::NR31] = 0xFF;
+    _mem[SoundReg::NR32] = 0x9F;
+    _mem[SoundReg::NR33] = 0xBF;
+    _mem[SoundReg::NR41] = 0xFF;
+    _mem[SoundReg::NR42] = 0x00;
+    _mem[SoundReg::NR43] = 0x00;
+    _mem[SoundReg::NR44] = 0xBF;
+    _mem[SoundReg::NR50] = 0x77;
+    _mem[SoundReg::NR51] = 0xF3;
+    _mem[SoundReg::NR52] = 0xF1;
     _mem[CtrlReg::LCDC] = 0x91;
     _mem[CtrlReg::SCY]  = 0x00;
     _mem[CtrlReg::SCX]  = 0x00;
@@ -1169,6 +1174,8 @@ void Cpu::reset(void)
     _mem[CtrlReg::WX]   = 0x00;
     _mem[CtrlReg::IF]   = 0x00;
     _mem[CtrlReg::IE]   = 0x00;
+
+    _audio->sound(&_mem[0]);
 
     if (_rom.size() != 0) {
         // std::max(32*1024, _rom.size())
@@ -1279,7 +1286,10 @@ void Cpu::interrupt(void)
     }
 }
 
-#include "time.h"
+void Cpu::audio(void)
+{
+    _audio->sound(&_mem[0]);
+}
 
 void Cpu::video(void)
 {

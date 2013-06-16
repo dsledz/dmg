@@ -29,6 +29,7 @@
 
 #include "cpu.h"
 #include "graphics.h"
+#include "sound.h"
 #include "control.h"
 
 using namespace DMG;
@@ -50,9 +51,11 @@ class Emulator {
         void run(void) {
             SDLDisplay display;
             SDLController control;
+            SDLAudio audio;
             _cpu.reset();
             _cpu.set_video(&display);
             _cpu.set_control(&control);
+            _cpu.set_audio(&audio);
 
             while (!_stop) {
                 SDL_Event event;
@@ -64,6 +67,7 @@ class Emulator {
             }
             _cpu.set_video(NULL);
             _cpu.set_control(NULL);
+            _cpu.set_audio(NULL);
         }
 
         void OnEvent(SDLController *control, SDL_Event *event) {

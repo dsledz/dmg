@@ -59,6 +59,20 @@ static inline std::ostream& operator << (std::ostream &os,
     return os;
 }
 
+template<typename T>
+static inline void bit_set(reg_t &reg, T bit, bool val)
+{
+    auto n = static_cast<typename std::underlying_type<T>::type>(bit);
+    reg &= ~(1 << n);
+    reg |= (val ? (1 << n) : 0);
+}
+
+static inline void bit_set(reg_t &reg, int n, bool val)
+{
+    reg &= ~(1 << n);
+    reg |= (val ? (1 << n) : 0);
+}
+
 static inline void bit_set(reg_t &reg, unsigned n, bool val)
 {
     reg &= ~(1 << n);
@@ -67,6 +81,18 @@ static inline void bit_set(reg_t &reg, unsigned n, bool val)
 
 static inline bool bit_isset(wreg_t reg, unsigned n)
 {
+    return (reg & (1 << n));
+}
+
+static inline bool bit_isset(wreg_t reg, int n)
+{
+    return (reg & (1 << n));
+}
+
+template<typename T>
+static inline bool bit_isset(wreg_t reg, T bit)
+{
+    auto n = static_cast<typename std::underlying_type<T>::type>(bit);
     return (reg & (1 << n));
 }
 
@@ -143,12 +169,10 @@ enum Oam {
     OamFlags = 3,
 };
 
-enum CtrlReg {
-    KEYS = 0xFF00,
-    DIV  = 0xFF04,
-    TIMA = 0xFF05,
-    TMA  = 0xFF06,
-    TAC  = 0xFF07,
+const addr_t SoundRegStart = 0xFF00;
+const addr_t SoundRegEnd = 0xFF3F;
+
+enum SoundReg {
     NR10 = 0xFF10,
     NR11 = 0xFF11,
     NR12 = 0xFF12,
@@ -156,6 +180,7 @@ enum CtrlReg {
     NR14 = 0xFF14,
     NR21 = 0xFF16,
     NR22 = 0xFF17,
+    NR23 = 0xFF18,
     NR24 = 0xFF19,
     NR30 = 0xFF1A,
     NR31 = 0xFF1B,
@@ -168,6 +193,14 @@ enum CtrlReg {
     NR50 = 0xFF24,
     NR51 = 0xFF25,
     NR52 = 0xFF26,
+};
+
+enum CtrlReg {
+    KEYS = 0xFF00,
+    DIV  = 0xFF04,
+    TIMA = 0xFF05,
+    TMA  = 0xFF06,
+    TAC  = 0xFF07,
     LCDC = 0xFF40,
     STAT = 0xFF41,
     SCY  = 0xFF42,
@@ -229,6 +262,15 @@ static inline reg_t key_value(GBKey key) {
     return static_cast<std::underlying_type<GBKey>::type>(key);
 }
 
+class Audio {
+public:
+    Audio() { };
+
+    virtual void set(addr_t addr, reg_t arg) { };
+    virtual void sound(const reg_t *ram) { };
+
+private:
+};
 
 class Video {
 public:
@@ -258,6 +300,7 @@ public:
     void load_rom(const std::string &name);
     void set_video(Video *video) { _video = video; };
     void set_control(Controller *control) { _control = control; };
+    void set_audio(Audio *audio) { _audio = audio; };
     void set_key(GBKey key, bool set);
     void toggle_debug(void) { _debug = !_debug; };
     void dump(void);
@@ -283,6 +326,7 @@ protected:
     void interrupt(void);
     void video();
     void timer();
+    void audio();
 
     /* Addition */
     void _add(reg_t &orig, reg_t value);
@@ -357,6 +401,7 @@ protected:
         _fcycles += cycles;
         _dcycles += cycles;
         _tcycles += cycles;
+        _scycles += cycles;
     }
     inline void _set_hflag(wreg_t orig, wreg_t arg, wreg_t result) {
         _flags.H = bit_isset(orig ^ arg ^ result, 4);
@@ -466,6 +511,7 @@ private:
     unsigned _fcycles; // Current number of cycles since start of hblank
     unsigned _dcycles; // Number of cycles since divider timer
     unsigned _tcycles; // Number of cycles since timer tick
+    unsigned _scycles; // Number of cycles since sound handling
 
     bvec _rom;
 
@@ -474,7 +520,9 @@ private:
 
     Controller _null_controller;
     Controller *_control;
-    reg_t _keys;
+
+    Audio _null_audio;
+    Audio *_audio;
 
     // XXX: debug
     bool _debug;

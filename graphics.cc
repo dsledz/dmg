@@ -193,7 +193,6 @@ class Sprite {
 
             // XXX: Handle transparency
 
-            _idx = idx;
             if (bit_isset(lcdc, LCDCBits::OBJSize)) {
                 _pattern &= 0xFE;
                 _sprite = create_surface(8, 16, true);
@@ -262,7 +261,6 @@ class Sprite {
         reg_t _pattern;
         reg_t _flags;
         surface_ptr _sprite;
-        reg_t _idx;
 };
 
 static surface_ptr

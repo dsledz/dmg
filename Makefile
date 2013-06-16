@@ -9,7 +9,7 @@ SDL_LIBS= -L${SDL_DIR}/lib -lSDLmain -lSDL -framework OpenGL -framework Cocoa
 
 CHECK_SRC= cpu_test.cc
 CPU_OBJS= cpu.o
-DMG_OBJS= main.o graphics.o control.o
+DMG_OBJS= main.o graphics.o control.o sound.o
 
 all: ${CPU_OBJS} check dmg
 
@@ -20,13 +20,16 @@ ${GTEST_LIB}:
 cpu.o: cpu.cc cpu.h
 	${CC} ${CPPFLAGS} -c cpu.cc
 
-graphics.o: graphics.cc graphics.h
+graphics.o: graphics.cc graphics.h cpu.h
 	${CC} ${CPPFLAGS} -c graphics.cc
 
-control.o: control.cc control.h
+control.o: control.cc control.h cpu.h
 	${CC} ${CPPFLAGS} -c control.cc
 
-main.o: cpu.h main.cc
+sound.o: sound.cc sound.h cpu.h
+	${CC} ${CPPFLAGS} -c sound.cc
+
+main.o: cpu.h main.cc control.h graphics.h sound.h
 	${CC} ${CPPFLAGS} -c main.cc
 
 check: ${GTEST_LIB} ${CPU_OBJS} ${CHECK_SRC}
