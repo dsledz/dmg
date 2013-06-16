@@ -66,7 +66,7 @@ SDLAudio::~SDLAudio(void)
 }
 
 void
-SDLAudio::set(addr_t addr, reg_t arg)
+SDLAudio::set(addr_t addr, byte_t arg)
 {
     AudioLock lock;
     switch (addr) {
@@ -125,7 +125,7 @@ SDLAudio::set(addr_t addr, reg_t arg)
 }
 
 void
-SDLAudio::sound(const reg_t *ram)
+SDLAudio::sound(const byte_t *ram)
 {
     for (addr_t addr = SoundRegStart; addr < SoundRegEnd; addr++)
         set(addr, ram[addr]);
@@ -204,10 +204,10 @@ sweep(Channel &channel)
     }
 }
 
-sreg_t
+sbyte_t
 SDLAudio::sample_sound(Channel &channel)
 {
-    sreg_t sample = channel.signal * channel.env.value;
+    sbyte_t sample = channel.signal * channel.env.value;
 
     channel.pos++;
     if (channel.pos == channel.period / 2) {

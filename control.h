@@ -38,13 +38,13 @@ public:
 
     void handle_key(const SDL_Event *event);
 
-    virtual reg_t get_buttons(void) const { return _keys & 0x0F; };
-    virtual reg_t get_arrows(void) const { return (_keys >> 4) & 0x0F; };
+    virtual byte_t get_buttons(void) const { return _keys & 0x0F; };
+    virtual byte_t get_arrows(void) const { return (_keys >> 4) & 0x0F; };
 
 private:
 
     SDLKey _key_map[8];
-    reg_t _keys;
+    byte_t _keys;
 };
 
 };

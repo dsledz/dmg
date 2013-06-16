@@ -105,7 +105,7 @@ bool Cpu::operator == (const Cpu &rhs) const
  *      |_|
  */
 
-reg_t &Cpu::_fetch(Register reg)
+byte_t &Cpu::_fetch(Register reg)
 {
     switch (reg) {
         case Register::A: return _rA;
@@ -121,9 +121,9 @@ reg_t &Cpu::_fetch(Register reg)
     throw CpuException();
 }
 
-void Cpu::_add(reg_t &dest, reg_t arg)
+void Cpu::_add(byte_t &dest, byte_t arg)
 {
-    wreg_t result = dest + arg;
+    word_t result = dest + arg;
 
     _set_hflag(dest, arg, result);
     _set_cflag(dest, arg, result);
@@ -133,9 +133,9 @@ void Cpu::_add(reg_t &dest, reg_t arg)
     dest = result;
 }
 
-void Cpu::_inc(reg_t &dest)
+void Cpu::_inc(byte_t &dest)
 {
-    wreg_t result = dest + 1;
+    word_t result = dest + 1;
 
     _set_hflag(dest, 1, result);
     _set_zflag(result);
@@ -144,9 +144,9 @@ void Cpu::_inc(reg_t &dest)
     dest = result;
 }
 
-void Cpu::_adc(reg_t &dest, reg_t arg)
+void Cpu::_adc(byte_t &dest, byte_t arg)
 {
-    wreg_t result = dest + arg + _flags.C;
+    word_t result = dest + arg + _flags.C;
 
     _set_hflag(dest, arg, result);
     _set_cflag(dest, arg, result);
@@ -156,9 +156,9 @@ void Cpu::_adc(reg_t &dest, reg_t arg)
     dest = result;
 }
 
-void Cpu::_sub(reg_t &dest, reg_t arg)
+void Cpu::_sub(byte_t &dest, byte_t arg)
 {
-    wreg_t result = dest - arg;
+    word_t result = dest - arg;
 
     _set_hflag(dest, arg, result);
     _set_cflag(dest, arg, result);
@@ -168,9 +168,9 @@ void Cpu::_sub(reg_t &dest, reg_t arg)
     dest = result;
 }
 
-void Cpu::_dec(reg_t &dest)
+void Cpu::_dec(byte_t &dest)
 {
-    reg_t result = dest - 1;
+    byte_t result = dest - 1;
 
     _set_hflag(dest, 1, result);
     _set_zflag(result);
@@ -179,10 +179,10 @@ void Cpu::_dec(reg_t &dest)
     dest = result;
 }
 
-void Cpu::_sbc(reg_t &dest, reg_t arg)
+void Cpu::_sbc(byte_t &dest, byte_t arg)
 {
-    reg_t carry = _flags.C;
-    reg_t result = dest - arg - carry;
+    byte_t carry = _flags.C;
+    byte_t result = dest - arg - carry;
 
     _flags.C = (arg > dest - carry) ? true : false;
     _flags.H = ((arg & 0x0f) + carry > (dest & 0x0f)) ? true : false;
@@ -192,7 +192,7 @@ void Cpu::_sbc(reg_t &dest, reg_t arg)
     dest = result;
 }
 
-void Cpu::_cp(reg_t dest, reg_t arg)
+void Cpu::_cp(byte_t dest, byte_t arg)
 {
     if (_debug)
         std::cout << "   " << Print(dest) << "<->" << Print(arg);
@@ -203,9 +203,9 @@ void Cpu::_cp(reg_t dest, reg_t arg)
     _flags.N = 1;
 }
 
-void Cpu::_and(reg_t &dest, reg_t arg)
+void Cpu::_and(byte_t &dest, byte_t arg)
 {
-    reg_t result = dest & arg;
+    byte_t result = dest & arg;
 
     _flags.C = 0;
     _flags.H = 1;
@@ -215,9 +215,9 @@ void Cpu::_and(reg_t &dest, reg_t arg)
     dest = result;
 }
 
-void Cpu::_xor(reg_t &dest, reg_t arg)
+void Cpu::_xor(byte_t &dest, byte_t arg)
 {
-    reg_t result = dest ^ arg;
+    byte_t result = dest ^ arg;
 
     _flags.C = 0;
     _flags.H = 0;
@@ -227,9 +227,9 @@ void Cpu::_xor(reg_t &dest, reg_t arg)
     dest = result;
 }
 
-void Cpu::_or(reg_t &dest, reg_t arg)
+void Cpu::_or(byte_t &dest, byte_t arg)
 {
-    reg_t result = dest | arg;
+    byte_t result = dest | arg;
 
     _flags.C = 0;
     _flags.H = 0;
@@ -239,39 +239,39 @@ void Cpu::_or(reg_t &dest, reg_t arg)
     dest = result;
 }
 
-void Cpu::_ld(reg_t &dest, reg_t arg)
+void Cpu::_ld(byte_t &dest, byte_t arg)
 {
-    reg_t result = arg;
+    byte_t result = arg;
 
     dest = result;
 }
 
-void Cpu::_bit(reg_t &dest, int bit)
+void Cpu::_bit(byte_t &dest, int bit)
 {
-    reg_t result = dest & (1 << bit);
+    byte_t result = dest & (1 << bit);
 
     _flags.H = 1;
     _set_zflag(result);
     _set_nflag(false);
 }
 
-void Cpu::_reset(reg_t &dest, int bit)
+void Cpu::_reset(byte_t &dest, int bit)
 {
-    reg_t result = dest & ~(1 << bit);
+    byte_t result = dest & ~(1 << bit);
 
     dest = result;
 }
 
-void Cpu::_set(reg_t &dest, int bit)
+void Cpu::_set(byte_t &dest, int bit)
 {
-    reg_t result = dest | (1 << bit);
+    byte_t result = dest | (1 << bit);
 
     dest = result;
 }
 
-void Cpu::_rl(reg_t &dest)
+void Cpu::_rl(byte_t &dest)
 {
-    reg_t result = (dest << 1) | _flags.C;
+    byte_t result = (dest << 1) | _flags.C;
 
     _flags.C = (dest & 0x80) != 0;
     _flags.H = 0;
@@ -287,9 +287,9 @@ void Cpu::_rla(void)
     _flags.Z = 0;
 }
 
-void Cpu::_rlc(reg_t &dest)
+void Cpu::_rlc(byte_t &dest)
 {
-    reg_t result = (dest << 1) | ((dest & 0x80) >> 7);
+    byte_t result = (dest << 1) | ((dest & 0x80) >> 7);
 
     _flags.C = (dest & 0x80) != 0;
     _flags.H = 0;
@@ -305,9 +305,9 @@ void Cpu::_rlca(void)
     _flags.Z = 0;
 }
 
-void Cpu::_rr(reg_t &dest)
+void Cpu::_rr(byte_t &dest)
 {
-    reg_t result = (dest >> 1) | (_flags.C ? 0x80 : 0x00);
+    byte_t result = (dest >> 1) | (_flags.C ? 0x80 : 0x00);
 
     _flags.C = (dest & 0x01) != 0;
     _flags.H = 0;
@@ -323,9 +323,9 @@ void Cpu::_rra(void)
     _flags.Z = 0;
 }
 
-void Cpu::_rrc(reg_t &dest)
+void Cpu::_rrc(byte_t &dest)
 {
-    reg_t result = (dest >> 1) | (dest & 0x01 ? 0x80 : 0x00);
+    byte_t result = (dest >> 1) | (dest & 0x01 ? 0x80 : 0x00);
 
     _flags.C = (dest & 0x01) != 0;
     _flags.H = 0;
@@ -341,9 +341,9 @@ void Cpu::_rrca(void)
     _flags.Z = 0;
 }
 
-void Cpu::_sla(reg_t &dest)
+void Cpu::_sla(byte_t &dest)
 {
-    reg_t result = (dest << 1);
+    byte_t result = (dest << 1);
 
     _flags.C = (dest & 0x80) != 0;
     _flags.H = 0;
@@ -353,9 +353,9 @@ void Cpu::_sla(reg_t &dest)
     dest = result;
 }
 
-void Cpu::_sra(reg_t &dest)
+void Cpu::_sra(byte_t &dest)
 {
-    reg_t result = (dest >> 1) | (dest & 0x80);
+    byte_t result = (dest >> 1) | (dest & 0x80);
 
     _flags.C = (dest & 0x01) != 0;
     _flags.H = 0;
@@ -365,9 +365,9 @@ void Cpu::_sra(reg_t &dest)
     dest = result;
 }
 
-void Cpu::_srl(reg_t &dest)
+void Cpu::_srl(byte_t &dest)
 {
-    reg_t result = (dest >> 1);
+    byte_t result = (dest >> 1);
 
     _flags.C = (dest & 0x01) != 0;
     _flags.H = 0;
@@ -377,9 +377,9 @@ void Cpu::_srl(reg_t &dest)
     dest = result;
 }
 
-void Cpu::_swap(reg_t &dest)
+void Cpu::_swap(byte_t &dest)
 {
-    reg_t result = (dest >> 4) | (dest << 4);
+    byte_t result = (dest >> 4) | (dest << 4);
 
     _flags.C = 0;
     _flags.H = 0;
@@ -391,9 +391,9 @@ void Cpu::_swap(reg_t &dest)
 
 void Cpu::prefix_cb(void)
 {
-    reg_t op = _d8();
+    byte_t op = _d8();
     int bit = (op & 0x38) >> 3;
-    reg_t &dest = _fetch(Register(op & 0x7));
+    byte_t &dest = _fetch(Register(op & 0x7));
     if ((op & 0xF8) == 0x00) {
         _rlc(dest);
     } else if ((op & 0xF8) == 0x08) {
@@ -419,13 +419,13 @@ void Cpu::prefix_cb(void)
     }
 }
 
-void Cpu::_rst(reg_t arg)
+void Cpu::_rst(byte_t arg)
 {
     _push(_rPCh, _rPCl);
     _rPC = arg;
 }
 
-void Cpu::_jr(bool jump, sreg_t arg)
+void Cpu::_jr(bool jump, sbyte_t arg)
 {
     if (jump) {
         _rPC += (char)arg;
@@ -433,7 +433,7 @@ void Cpu::_jr(bool jump, sreg_t arg)
     }
 }
 
-void Cpu::_jp(bool jump, wreg_t arg)
+void Cpu::_jp(bool jump, word_t arg)
 {
     if (jump) {
         if (_debug)
@@ -443,7 +443,7 @@ void Cpu::_jp(bool jump, wreg_t arg)
     }
 }
 
-void Cpu::_call(bool jump, wreg_t addr)
+void Cpu::_call(bool jump, word_t addr)
 {
     if (jump) {
         _call(addr);
@@ -451,7 +451,7 @@ void Cpu::_call(bool jump, wreg_t addr)
     }
 }
 
-void Cpu::_call(wreg_t addr)
+void Cpu::_call(word_t addr)
 {
     _push(_rPCh, _rPCl);
 
@@ -469,10 +469,10 @@ void Cpu::_ret(bool jump)
     }
 }
 
-void Cpu::_push(reg_t high, reg_t low)
+void Cpu::_push(byte_t high, byte_t low)
 {
     if (_debug) {
-        wreg_t arg = high;
+        word_t arg = high;
         arg = arg << 8 | low;
         std::cout << " <- " << Print(arg);
     }
@@ -481,12 +481,12 @@ void Cpu::_push(reg_t high, reg_t low)
     _write(--_rSP, low);
 }
 
-void Cpu::_pop(reg_t &high, reg_t &low)
+void Cpu::_pop(byte_t &high, byte_t &low)
 {
     low = _mem[_rSP++];
     high = _mem[_rSP++];
     if (_debug) {
-        wreg_t arg = high;
+        word_t arg = high;
         arg = arg << 8 | low;
         std::cout << " -> " << Print(arg);
     }
@@ -516,7 +516,7 @@ void Cpu::dump(void)
     _dump_reg(std::cout);
 }
 
-wreg_t &Cpu::_fetchw(Register reg)
+word_t &Cpu::_fetchw(Register reg)
 {
     switch (reg) {
         case Register::BC: return _rBC;
@@ -529,9 +529,9 @@ wreg_t &Cpu::_fetchw(Register reg)
     throw CpuException();
 }
 
-void Cpu::_addw(wreg_t &wdest, wreg_t arg)
+void Cpu::_addw(word_t &wdest, word_t arg)
 {
-    wreg_t result = wdest + arg;
+    word_t result = wdest + arg;
 
     _flags.C = (result < arg) ? true : false;
     _flags.H = ((result & 0xfff) < (arg & 0xfff)) ? true : false;
@@ -540,10 +540,10 @@ void Cpu::_addw(wreg_t &wdest, wreg_t arg)
     wdest = result;
 }
 
-void Cpu::_addsp(sreg_t arg)
+void Cpu::_addsp(sbyte_t arg)
 {
-    wreg_t &wdest = _rSP;
-    wreg_t result = wdest + arg;
+    word_t &wdest = _rSP;
+    word_t result = wdest + arg;
 
     _set_cflag(_rSP, arg, result);
     _set_hflag(_rSP, arg, result);
@@ -553,10 +553,10 @@ void Cpu::_addsp(sreg_t arg)
     wdest = result;
 }
 
-void Cpu::_ldhlsp(sreg_t arg)
+void Cpu::_ldhlsp(sbyte_t arg)
 {
-    wreg_t &wdest = _rHL;
-    wreg_t result = _rSP + arg;
+    word_t &wdest = _rHL;
+    word_t result = _rSP + arg;
 
     _set_cflag(_rSP, arg, result);
     _set_hflag(_rSP, arg, result);
@@ -566,33 +566,33 @@ void Cpu::_ldhlsp(sreg_t arg)
     wdest = result;
 }
 
-void Cpu::_incw(wreg_t &wdest)
+void Cpu::_incw(word_t &wdest)
 {
-    wreg_t result = wdest + 1;
+    word_t result = wdest + 1;
 
     wdest = result;
 }
 
-void Cpu::_subw(wreg_t &wdest, wreg_t arg)
+void Cpu::_subw(word_t &wdest, word_t arg)
 {
-    wreg_t result = wdest - arg;
+    word_t result = wdest - arg;
 
     wdest = result;
 }
 
-void Cpu::_decw(wreg_t &wdest)
+void Cpu::_decw(word_t &wdest)
 {
-    wreg_t result = wdest - 1;
+    word_t result = wdest - 1;
 
     wdest = result;
 }
 
-void Cpu::_ldw(wreg_t &wdest, wreg_t arg)
+void Cpu::_ldw(word_t &wdest, word_t arg)
 {
     wdest = arg;
 }
 
-void Cpu::_ldi(addr_t addr, reg_t arg)
+void Cpu::_ldi(addr_t addr, byte_t arg)
 {
     if (_debug)
         std::cout << " -> " << Print(addr);
@@ -600,7 +600,7 @@ void Cpu::_ldi(addr_t addr, reg_t arg)
     _write(addr, arg);
 }
 
-void Cpu::_ldwi(addr_t addr, wreg_t arg)
+void Cpu::_ldwi(addr_t addr, word_t arg)
 {
     if (_debug)
         std::cout << " -> " << Print(addr) << " <- " << Print(arg);
@@ -611,8 +611,8 @@ void Cpu::_ldwi(addr_t addr, wreg_t arg)
 
 void Cpu::_cpl(void)
 {
-    reg_t &dest = _rA;
-    reg_t result = ~dest;
+    byte_t &dest = _rA;
+    byte_t result = ~dest;
 
     _flags.H = 1;
     _flags.N = 1;
@@ -636,9 +636,9 @@ void Cpu::_scf(void)
 
 void Cpu::_daa(void)
 {
-    reg_t &dest = _rA;
-    wreg_t arg = 0;
-    wreg_t result = dest;
+    byte_t &dest = _rA;
+    word_t arg = 0;
+    word_t result = dest;
 
     if (!_flags.N) {
         if (_flags.H || (dest & 0x0f) > 9) arg += 0x06;
@@ -672,8 +672,8 @@ void Cpu::_daa(void)
 
 void Cpu::dispatch(void)
 {
-    wreg_t pc = _rPC;
-    reg_t op = _mem[_rPC++];
+    word_t pc = _rPC;
+    byte_t op = _mem[_rPC++];
     //Register src = Register(op & 0x7);
     //Register dest = Register((op & 0x38) >> 3);
 
@@ -953,7 +953,7 @@ void Cpu::step(void)
 
 }
 
-void Cpu::set(Register r, wreg_t arg)
+void Cpu::set(Register r, word_t arg)
 {
     switch (r) {
     case Register::A: _rA = arg; break;
@@ -973,7 +973,7 @@ void Cpu::set(Register r, wreg_t arg)
     }
 }
 
-wreg_t Cpu::get(Register r)
+word_t Cpu::get(Register r)
 {
     switch (r) {
     case Register::A: return _rA; break;
@@ -993,12 +993,12 @@ wreg_t Cpu::get(Register r)
     }
 }
 
-reg_t Cpu::get(addr_t addr)
+byte_t Cpu::get(addr_t addr)
 {
     return _mem[addr];
 }
 
-void Cpu::set(addr_t addr, reg_t arg)
+void Cpu::set(addr_t addr, byte_t arg)
 {
     _mem[addr] = arg;
 }
@@ -1026,20 +1026,20 @@ void Cpu::_dump_reg(std::ostream &os) const
     os << std::endl;
 }
 
-reg_t Cpu::load(reg_t op)
+byte_t Cpu::load(byte_t op)
 {
     _mem[_rPC++] = op;
     return 1;
 }
 
-reg_t Cpu::load(reg_t op, reg_t arg)
+byte_t Cpu::load(byte_t op, byte_t arg)
 {
     _mem[_rPC++] = op;
     _mem[_rPC++] = arg;
     return 1;
 }
 
-reg_t Cpu::load(reg_t op, reg_t arg1, reg_t arg2)
+byte_t Cpu::load(byte_t op, byte_t arg1, byte_t arg2)
 {
     _mem[_rPC++] = op;
     _mem[_rPC++] = arg1;
@@ -1054,7 +1054,7 @@ void Cpu::test_step(unsigned steps)
         step();
 }
 
-void Cpu::_write(addr_t addr, reg_t arg)
+void Cpu::_write(addr_t addr, byte_t arg)
 {
     if (addr >= 0xFF80) {
         // Internal RAM
@@ -1258,7 +1258,7 @@ addr_t InterruptVector[] = {
  */
 void Cpu::interrupt(void)
 {
-    reg_t flags = _mem[CtrlReg::IF];
+    byte_t flags = _mem[CtrlReg::IF];
     if (_ime == IME::Disabled) {
         if (_state == State::Halted)
             for (unsigned i = 0; i < 5; i++)
@@ -1270,7 +1270,7 @@ void Cpu::interrupt(void)
         _ime = IME::Enabled;
         return;
     }
-    reg_t enabled = _mem[CtrlReg::IE];
+    byte_t enabled = _mem[CtrlReg::IE];
     for (unsigned i = 0; i < 5; i++) {
         if (bit_isset(flags, i) && bit_isset(enabled, i)) {
             _push(_rPCh, _rPCl);
@@ -1293,8 +1293,8 @@ void Cpu::audio(void)
 
 void Cpu::video(void)
 {
-    reg_t &stat = _mem[CtrlReg::STAT];
-    reg_t &ly = _mem[CtrlReg::LY];
+    byte_t &stat = _mem[CtrlReg::STAT];
+    byte_t &ly = _mem[CtrlReg::LY];
 
     switch (stat & 0x03) {
     case LCDMode::HBlankMode:
@@ -1351,7 +1351,7 @@ void Cpu::timer(void)
         _mem[CtrlReg::DIV]++;
         // Divider register triggerd
     }
-    reg_t &tac = _mem[CtrlReg::TAC];
+    byte_t &tac = _mem[CtrlReg::TAC];
     if (tac & 0x04) {
         unsigned limit = 1024;
         switch (tac & 0x3) {
@@ -1361,7 +1361,7 @@ void Cpu::timer(void)
         case 3: limit = 256; break;
         }
         if (_tcycles > limit) {
-            reg_t &tima = _mem[CtrlReg::TIMA];
+            byte_t &tima = _mem[CtrlReg::TIMA];
             _tcycles -= limit;
             if (tima == 0xff) {
                 // Trigger the interrupt

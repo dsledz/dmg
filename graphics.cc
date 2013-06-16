@@ -59,7 +59,7 @@ create_surface(short w, short h, bool alpha)
 }
 
 static void
-convert_palette(unsigned *palette, reg_t byte, bool obj)
+convert_palette(unsigned *palette, byte_t byte, bool obj)
 {
     palette[0] = obj ? ColorZ : global_palette[(byte & 0x03)];
     palette[1] = global_palette[(byte & 0x0C) >> 2];
@@ -68,7 +68,7 @@ convert_palette(unsigned *palette, reg_t byte, bool obj)
 }
 
 static void
-convert_line(unsigned *pixels, reg_t low, reg_t high, unsigned *palette,
+convert_line(unsigned *pixels, byte_t low, byte_t high, unsigned *palette,
              bool flip)
 {
     unsigned j = 8;
@@ -124,13 +124,13 @@ class TileMap {
     private:
         TileMap(const TileMap &rhs) { }
     public:
-        TileMap(reg_t palette) {
+        TileMap(byte_t palette) {
             convert_palette(_palette, palette, false);
         }
         ~TileMap() {
         }
 
-        void init(const reg_t *map_data, bool base) {
+        void init(const byte_t *map_data, bool base) {
             _base = base;
             _map = create_surface(256, 64, false);
 
@@ -139,8 +139,8 @@ class TileMap {
             for (unsigned y = 0; y < 8; y++) {
                 for (unsigned x = 0; x < 32; x++) {
                     for (unsigned l = 0; l < 8; l++) {
-                    reg_t low = *map_data++;
-                    reg_t high = *map_data++;
+                    byte_t low = *map_data++;
+                    byte_t high = *map_data++;
                     convert_line(&pixels[(y * 8 + l) * 256 + x*8],
                                  low, high, _palette, false);
                     }
@@ -149,7 +149,7 @@ class TileMap {
             SDL_UnlockSurface(_map.get());
         }
 
-        SDL_Rect *tile(reg_t idx) {
+        SDL_Rect *tile(byte_t idx) {
             // XXX: Handle tile offset better
             if (!_base)
                 idx = (char)idx + 128;
@@ -177,8 +177,8 @@ class Sprite {
     public:
         Sprite(void) { }
         ~Sprite(void) { }
-        void init(unsigned idx, const reg_t *ram, const reg_t *oam) {
-            reg_t lcdc = ram[CtrlReg::LCDC];
+        void init(unsigned idx, const byte_t *ram, const byte_t *oam) {
+            byte_t lcdc = ram[CtrlReg::LCDC];
             _Y = oam[Oam::OamY];
             _X = oam[Oam::OamX];
             _pattern = oam[Oam::OamPattern];
@@ -203,7 +203,7 @@ class Sprite {
             unsigned *pixels = (unsigned *)_sprite->pixels;
 
             // Handle first half of the sprite
-            const reg_t *data = &ram[Mem::ObjTiles];
+            const byte_t *data = &ram[Mem::ObjTiles];
             data += _pattern * 16;
             for (unsigned i = 0; i < 8; i++) {
                 convert_line(&pixels[i * _sprite->w], *data++, *data++,
@@ -256,15 +256,15 @@ class Sprite {
 
     private:
 
-        reg_t _X;
-        reg_t _Y;
-        reg_t _pattern;
-        reg_t _flags;
+        byte_t _X;
+        byte_t _Y;
+        byte_t _pattern;
+        byte_t _flags;
         surface_ptr _sprite;
 };
 
 static surface_ptr
-create_map(TileMap *tile_map, const reg_t *map)
+create_map(TileMap *tile_map, const byte_t *map)
 {
     // Render the tiles
     surface_ptr tiles = create_surface(256, 256, false);
@@ -367,9 +367,9 @@ SDLDisplay::~SDLDisplay(void)
 }
 
 void
-SDLDisplay::render(const reg_t *ram)
+SDLDisplay::render(const byte_t *ram)
 {
-    reg_t lcdc = ram[CtrlReg::LCDC];
+    byte_t lcdc = ram[CtrlReg::LCDC];
 
     if (!bit_isset(lcdc, LCDCBits::LCDEnabled))
         return;
@@ -388,7 +388,7 @@ SDLDisplay::render(const reg_t *ram)
         tiles = &bg_tiles;
 
     if (bit_isset(lcdc, LCDCBits::BGDisplay)) {
-        const reg_t *map = bit_isset(lcdc, LCDCBits::BGTileMap) ?
+        const byte_t *map = bit_isset(lcdc, LCDCBits::BGTileMap) ?
             &ram[0x9C00] : &ram[0x9800];
         surface_ptr bg(create_map(tiles, map));
         short scx = ram[CtrlReg::SCX];
@@ -397,7 +397,7 @@ SDLDisplay::render(const reg_t *ram)
     }
 
     if (bit_isset(lcdc, LCDCBits::WindowDisplay)) {
-        const reg_t *map = bit_isset(lcdc, LCDCBits::WindowTileMap) ?
+        const byte_t *map = bit_isset(lcdc, LCDCBits::WindowTileMap) ?
             &ram[0x9C00] : &ram[0x9800];
         surface_ptr win(create_map(tiles, map));
         short wx = ram[CtrlReg::WX];
@@ -405,7 +405,7 @@ SDLDisplay::render(const reg_t *ram)
         blit_window(screen.get(), win.get(), wx, wy);
     }
 
-    const reg_t *oam = &ram[0xFE00];
+    const byte_t *oam = &ram[0xFE00];
     Sprite sprites[40];
     for (unsigned i = 0; i < 40; i++) {
         sprites[i].init(i, ram, oam);

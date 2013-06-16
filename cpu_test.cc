@@ -86,7 +86,7 @@ enum Opcode {
     CP_E = 0xBB,
 };
 
-static inline reg_t op_value(const Opcode &obj)
+static inline byte_t op_value(const Opcode &obj)
 {
     return static_cast<std::underlying_type<Opcode>::type>(obj);
 }
@@ -97,7 +97,7 @@ TEST(DMGOpcodes, Constructor) {
 
 TEST(BitOps, set)
 {
-    reg_t val;
+    byte_t val;
     bit_set(val, 2, true);
     EXPECT_EQ(val, 0x4);
 }

@@ -30,23 +30,22 @@
 #include <type_traits>
 #include <vector>
 
-typedef unsigned char reg_t;
-typedef char sreg_t;
-typedef unsigned short addr_t;
-typedef unsigned short wreg_t;
 typedef unsigned char byte_t;
+typedef char sbyte_t;
+typedef unsigned short addr_t;
+typedef unsigned short word_t;
 typedef std::vector<byte_t> bvec;
 
 namespace DMG {
 
 class Print {
 public:
-    Print(bool reg): v(reg), w(2) {}
-    Print(reg_t reg): v(reg), w(2) {}
-    Print(sreg_t reg): v(reg), w(2) {}
-    Print(wreg_t reg): v(reg), w(4) {}
-    Print(unsigned reg): v(reg), w(4) {}
-    Print(int reg): v(reg), w(2) {}
+    Print(bool arg): v(arg), w(2) {}
+    Print(byte_t arg): v(arg), w(2) {}
+    Print(sbyte_t arg): v(arg), w(2) {}
+    Print(word_t arg): v(arg), w(4) {}
+    Print(unsigned arg): v(arg), w(4) {}
+    Print(int arg): v(arg), w(2) {}
     unsigned v;
     unsigned w;
 };
@@ -60,40 +59,40 @@ static inline std::ostream& operator << (std::ostream &os,
 }
 
 template<typename T>
-static inline void bit_set(reg_t &reg, T bit, bool val)
+static inline void bit_set(byte_t &arg, T bit, bool val)
 {
     auto n = static_cast<typename std::underlying_type<T>::type>(bit);
-    reg &= ~(1 << n);
-    reg |= (val ? (1 << n) : 0);
+    arg &= ~(1 << n);
+    arg |= (val ? (1 << n) : 0);
 }
 
-static inline void bit_set(reg_t &reg, int n, bool val)
+static inline void bit_set(byte_t &arg, int n, bool val)
 {
-    reg &= ~(1 << n);
-    reg |= (val ? (1 << n) : 0);
+    arg &= ~(1 << n);
+    arg |= (val ? (1 << n) : 0);
 }
 
-static inline void bit_set(reg_t &reg, unsigned n, bool val)
+static inline void bit_set(byte_t &arg, unsigned n, bool val)
 {
-    reg &= ~(1 << n);
-    reg |= (val ? (1 << n) : 0);
+    arg &= ~(1 << n);
+    arg |= (val ? (1 << n) : 0);
 }
 
-static inline bool bit_isset(wreg_t reg, unsigned n)
+static inline bool bit_isset(word_t arg, unsigned n)
 {
-    return (reg & (1 << n));
+    return (arg & (1 << n));
 }
 
-static inline bool bit_isset(wreg_t reg, int n)
+static inline bool bit_isset(word_t arg, int n)
 {
-    return (reg & (1 << n));
+    return (arg & (1 << n));
 }
 
 template<typename T>
-static inline bool bit_isset(wreg_t reg, T bit)
+static inline bool bit_isset(word_t arg, T bit)
 {
     auto n = static_cast<typename std::underlying_type<T>::type>(bit);
-    return (reg & (1 << n));
+    return (arg & (1 << n));
 }
 
 /*  _____                    _   _
@@ -115,9 +114,9 @@ public:
 
 class OpcodeException: protected EmuException {
 public:
-    OpcodeException(reg_t op): _op(op) { };
+    OpcodeException(byte_t op): _op(op) { };
 private:
-    reg_t _op;
+    byte_t _op;
 };
 
 class RomException: protected EmuException {
@@ -258,7 +257,7 @@ enum class GBKey {
     None = 8,
     Size = 8,
 };
-static inline reg_t key_value(GBKey key) {
+static inline byte_t key_value(GBKey key) {
     return static_cast<std::underlying_type<GBKey>::type>(key);
 }
 
@@ -266,8 +265,8 @@ class Audio {
 public:
     Audio() { };
 
-    virtual void set(addr_t addr, reg_t arg) { };
-    virtual void sound(const reg_t *ram) { };
+    virtual void set(addr_t addr, byte_t arg) { };
+    virtual void sound(const byte_t *ram) { };
 
 private:
 };
@@ -276,15 +275,15 @@ class Video {
 public:
     Video() { };
 
-    virtual void render(const reg_t *ram) { };
+    virtual void render(const byte_t *ram) { };
 };
 
 class Controller {
 public:
     Controller() { };
 
-    virtual reg_t get_buttons(void) const { return 0x0F; };
-    virtual reg_t get_arrows(void) const { return 0x0F; };
+    virtual byte_t get_buttons(void) const { return 0x0F; };
+    virtual byte_t get_arrows(void) const { return 0x0F; };
 };
 
 class Cpu {
@@ -308,14 +307,14 @@ public:
     // Exposed for testing only
 
     // Test functions
-    reg_t load(reg_t op);
-    reg_t load(reg_t op, byte_t arg);
-    reg_t load(reg_t op, byte_t arg1, byte_t arg2);
+    byte_t load(byte_t op);
+    byte_t load(byte_t op, byte_t arg);
+    byte_t load(byte_t op, byte_t arg1, byte_t arg2);
     void test_step(unsigned steps);
-    void set(Register reg, wreg_t value);
-    void set(addr_t addr, reg_t value);
-    wreg_t get(Register reg);
-    reg_t get(addr_t addr);
+    void set(Register reg, word_t value);
+    void set(addr_t addr, byte_t value);
+    word_t get(Register reg);
+    byte_t get(addr_t addr);
     unsigned cycles(void) { return _cycles; };
 
 protected:
@@ -329,71 +328,71 @@ protected:
     void audio();
 
     /* Addition */
-    void _add(reg_t &orig, reg_t value);
-    void _adc(reg_t &orig, reg_t value);
-    void _addw(wreg_t &worig, wreg_t value);
-    void _inc(reg_t &orig);
-    void _incw(wreg_t &worig);
+    void _add(byte_t &orig, byte_t value);
+    void _adc(byte_t &orig, byte_t value);
+    void _addw(word_t &worig, word_t value);
+    void _inc(byte_t &orig);
+    void _incw(word_t &worig);
 
     /* Subtraction */
-    void _sub(reg_t &orig, reg_t value);
-    void _subw(wreg_t &worig, wreg_t value);
-    void _sbc(reg_t &orig, reg_t value);
-    void _dec(reg_t &orig);
-    void _decw(wreg_t &worig);
+    void _sub(byte_t &orig, byte_t value);
+    void _subw(word_t &worig, word_t value);
+    void _sbc(byte_t &orig, byte_t value);
+    void _dec(byte_t &orig);
+    void _decw(word_t &worig);
 
     /* Load */
-    void _ld(reg_t &orig, reg_t value);
-    void _ldw(wreg_t &worig, wreg_t value);
-    void _ldi(addr_t addr, reg_t value);
-    void _ldwi(addr_t addr, wreg_t value);
+    void _ld(byte_t &orig, byte_t value);
+    void _ldw(word_t &worig, word_t value);
+    void _ldi(addr_t addr, byte_t value);
+    void _ldwi(addr_t addr, word_t value);
 
     /* Bitwise ops */
-    void _and(reg_t &orig, reg_t value);
-    void _xor(reg_t &orig, reg_t value);
-    void _or(reg_t &orig, reg_t value);
-    void _bit(reg_t &orig, int bit);
-    void _reset(reg_t &orig, int bit);
-    void _set(reg_t &orig, int bit);
-    void _swap(reg_t &orig);
-    void _rl(reg_t &orig);
+    void _and(byte_t &orig, byte_t value);
+    void _xor(byte_t &orig, byte_t value);
+    void _or(byte_t &orig, byte_t value);
+    void _bit(byte_t &orig, int bit);
+    void _reset(byte_t &orig, int bit);
+    void _set(byte_t &orig, int bit);
+    void _swap(byte_t &orig);
+    void _rl(byte_t &orig);
     void _rla(void);
-    void _rlc(reg_t &orig);
+    void _rlc(byte_t &orig);
     void _rlca(void);
-    void _rr(reg_t &orig);
+    void _rr(byte_t &orig);
     void _rra(void);
-    void _rrc(reg_t &orig);
+    void _rrc(byte_t &orig);
     void _rrca(void);
-    void _sla(reg_t &orig);
-    void _sra(reg_t &orig);
-    void _srl(reg_t &orig);
+    void _sla(byte_t &orig);
+    void _sra(byte_t &orig);
+    void _srl(byte_t &orig);
 
-    void _cp(reg_t lhs, reg_t rhs);
+    void _cp(byte_t lhs, byte_t rhs);
     void _daa(void);
     void _cpl(void);
     void _ccf(void);
     void _scf(void);
-    void _ldhlsp(sreg_t value);
-    void _addsp(sreg_t value);
+    void _ldhlsp(sbyte_t value);
+    void _addsp(sbyte_t value);
 
     void _stop(void);
     void _halt(void);
-    void _rst(reg_t value);
-    void _jr(bool jump, sreg_t value);
-    void _jp(bool jump, wreg_t value);
-    void _call(wreg_t value);
-    void _call(bool jump, wreg_t value);
+    void _rst(byte_t value);
+    void _jr(bool jump, sbyte_t value);
+    void _jp(bool jump, word_t value);
+    void _call(word_t value);
+    void _call(bool jump, word_t value);
     void _ret(bool jump);
-    void _push(reg_t high, reg_t low);
-    void _pop(reg_t &high, reg_t &low);
-    void _push(wreg_t reg);
-    void _pop(wreg_t &reg);
+    void _push(byte_t high, byte_t low);
+    void _pop(byte_t &high, byte_t &low);
+    void _push(word_t arg);
+    void _pop(word_t &arg);
 
     /* Store/Load */
-    reg_t &_fetch(Register reg);
-    wreg_t &_fetchw(Register reg);
-    void _write(addr_t addr, reg_t value);
-    reg_t &_read(addr_t addr) {
+    byte_t &_fetch(Register reg);
+    word_t &_fetchw(Register reg);
+    void _write(addr_t addr, byte_t value);
+    byte_t &_read(addr_t addr) {
         return _mem[addr];
     }
     inline void _tick(unsigned cycles) {
@@ -403,13 +402,13 @@ protected:
         _tcycles += cycles;
         _scycles += cycles;
     }
-    inline void _set_hflag(wreg_t orig, wreg_t arg, wreg_t result) {
+    inline void _set_hflag(word_t orig, word_t arg, word_t result) {
         _flags.H = bit_isset(orig ^ arg ^ result, 4);
     }
-    inline void _set_cflag(wreg_t orig, wreg_t arg, wreg_t result) {
+    inline void _set_cflag(word_t orig, word_t arg, word_t result) {
         _flags.C = bit_isset(orig ^ arg ^ result, 8);
     }
-    inline void _set_zflag(wreg_t result) {
+    inline void _set_zflag(word_t result) {
         _flags.Z = (result & 0xff) == 0;
     }
     inline void _set_nflag(bool neg) {
@@ -417,29 +416,29 @@ protected:
     }
 
     /* decode accessors */
-    inline wreg_t _d16(void) {
-        wreg_t tmp = _mem[_rPC] | (_mem[_rPC+1] << 8);
+    inline word_t _d16(void) {
+        word_t tmp = _mem[_rPC] | (_mem[_rPC+1] << 8);
         if (_debug)
             std::cout << " d(" << Print(tmp) << ")";
         _rPC+=2;
         return tmp;
     }
-    inline reg_t _d8(void) {
-        reg_t tmp = _mem[_rPC];
+    inline byte_t _d8(void) {
+        byte_t tmp = _mem[_rPC];
         if (_debug)
             std::cout << " d(" << Print(tmp) << ")";
         _rPC++;
         return tmp;
     }
-    inline reg_t _r8(void) {
-        reg_t tmp = _mem[_rPC];
+    inline byte_t _r8(void) {
+        byte_t tmp = _mem[_rPC];
         if (_debug)
             std::cout << " r(" << Print(tmp) << ")";
         _rPC++;
         return tmp;
     }
-    inline wreg_t _a8(void) {
-        wreg_t tmp = _mem[_rPC] + 0xff00;
+    inline word_t _a8(void) {
+        word_t tmp = _mem[_rPC] + 0xff00;
         if (_debug)
             std::cout << " a(" << Print(tmp) << ")";
         _rPC++;
@@ -456,52 +455,52 @@ private:
         struct {
             union {
                 struct {
-                    reg_t reserved:4;
-                    reg_t C:1;
-                    reg_t H:1;
-                    reg_t N:1;
-                    reg_t Z:1;
+                    byte_t reserved:4;
+                    byte_t C:1;
+                    byte_t H:1;
+                    byte_t N:1;
+                    byte_t Z:1;
                 } _flags;
-                reg_t _rF;
+                byte_t _rF;
             };
-            reg_t _rA;
+            byte_t _rA;
         };
-        wreg_t _rAF;
+        word_t _rAF;
     };
     union {
         struct {
-            reg_t _rC;
-            reg_t _rB;
+            byte_t _rC;
+            byte_t _rB;
         };
-        wreg_t _rBC;
+        word_t _rBC;
     };
     union {
         struct {
-            reg_t _rE;
-            reg_t _rD;
+            byte_t _rE;
+            byte_t _rD;
         };
-        wreg_t _rDE;
+        word_t _rDE;
     };
     union {
         struct {
-            reg_t _rL;
-            reg_t _rH;
+            byte_t _rL;
+            byte_t _rH;
         };
-        wreg_t _rHL;
+        word_t _rHL;
     };
     union {
         struct {
-            reg_t _rSPl;
-            reg_t _rSPh;
+            byte_t _rSPl;
+            byte_t _rSPh;
         };
-        wreg_t _rSP;
+        word_t _rSP;
     };
     union {
         struct {
-            reg_t _rPCl;
-            reg_t _rPCh;
+            byte_t _rPCl;
+            byte_t _rPCh;
         };
-        wreg_t _rPC;
+        word_t _rPC;
     };
 
     IME _ime;

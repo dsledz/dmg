@@ -70,11 +70,11 @@ struct Sweep {
 struct Channel {
     // Internal State
     bool     on;      // Enabled/Disabled
-    reg_t    channel; // Channel ID
+    byte_t    channel; // Channel ID
     Envelope env;     // Envelope calculation
     Sweep    sweep;   // Sweep calculation
     bool     loop;
-    sreg_t   signal;
+    sbyte_t   signal;
     int      freq;   // Freq (In GB Hz)
     unsigned period; // Period (in SAMPLES)
     unsigned pos;    // Position within the period
@@ -87,15 +87,15 @@ class SDLAudio: public Audio {
         SDLAudio(void);
         ~SDLAudio(void);
 
-        virtual void set(addr_t addr, reg_t arg);
-        virtual void sound(const reg_t *ram);
+        virtual void set(addr_t addr, byte_t arg);
+        virtual void sound(const byte_t *ram);
 
         void mix(Uint8 *stream, int len);
     private:
 
         void generate(Channel &channel, bvec &data, int len);
         void start_sound(Channel &channel);
-        sreg_t sample_sound(Channel &channel);
+        sbyte_t sample_sound(Channel &channel);
 
         void sound4(bvec &data, int len);
 
@@ -103,8 +103,8 @@ class SDLAudio: public Audio {
         Channel _Snd2;
         Channel _Snd3;
         Channel _Snd4;
-        reg_t _NR51;
-        reg_t _NR52;
+        byte_t _NR51;
+        byte_t _NR52;
 };
 
 };

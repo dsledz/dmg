@@ -49,7 +49,7 @@ public:
     SDLDisplay(void);
     ~SDLDisplay(void);
 
-    virtual void render(const reg_t *ram);
+    virtual void render(const byte_t *ram);
 
 private:
     surface_ptr _window;
