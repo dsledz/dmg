@@ -266,7 +266,7 @@ TEST(DMGOpcodes, ldd_loop)
     expect.set(Register::PC, 0x0C);
     expect.set(Register::HL, 0x7fff);
     expect.set(Register::SP, 0xfffe);
-    expect.set(CtrlReg::STAT, 0x11);
+    expect.set(VideoReg::STAT, 0x11);
 
     // Run until we've zeroed out the vram
     cpu.test_step(0x2000 * 3 + 3);
@@ -401,13 +401,25 @@ TEST(DMGOpcodes, cpl)
 // Execute flow
 TEST(DMGTest, Step)
 {
-    Cpu cpu, expect;
+    Cpu cpu;
     cpu.reset();
-
-    expect = cpu;
 
     // Execute the boot rom. We hang at 0xe9 because we don't have a rom
     while (cpu.get(Register::PC) != 0x00e9) cpu.step();
 
+}
+
+TEST(MemoryTest, test)
+{
+    MemoryBus m;
+    m.write(0xC500, 0x55);
+
+    SimpleMap ram(0xC000, 0xDFFF);
+    m.add_map(&ram);
+
+    byte_t expected = 0xff;
+    ram.write(0xC500, expected);
+    byte_t actual = m.read(0xC500);
+    EXPECT_EQ(expected, actual);
 }
 

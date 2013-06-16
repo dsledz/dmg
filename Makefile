@@ -8,7 +8,7 @@ GTEST_LIB= libgtest.a
 SDL_LIBS= -L${SDL_DIR}/lib -lSDLmain -lSDL -framework OpenGL -framework Cocoa
 
 CHECK_SRC= cpu_test.cc
-CPU_OBJS= cpu.o
+CPU_OBJS= cpu.o mbc.o
 DMG_OBJS= main.o graphics.o control.o sound.o
 
 all: ${CPU_OBJS} check dmg
@@ -28,6 +28,9 @@ control.o: control.cc control.h cpu.h
 
 sound.o: sound.cc sound.h cpu.h
 	${CC} ${CPPFLAGS} -c sound.cc
+
+mbc.o: mbc.cc mbc.h cpu.h
+	${CC} ${CPPFLAGS} -c mbc.cc
 
 main.o: cpu.h main.cc control.h graphics.h sound.h
 	${CC} ${CPPFLAGS} -c main.cc

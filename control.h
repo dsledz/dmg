@@ -31,20 +31,63 @@
 
 namespace DMG {
 
-class SDLController: public Controller  {
+enum KeysReg {
+    ButtonsSelect = 5,
+    ArrowSelect   = 4,
+    DownOrSelect  = 3,
+    UpOrSelect    = 2,
+    LeftOrB       = 1,
+    RightOrA      = 0,
+};
+
+enum class GBKey {
+    A = 0,
+    B = 1,
+    Select = 2,
+    Start = 3,
+    Right = 4,
+    Left = 5,
+    Up = 6,
+    Down = 7,
+    Size = 8,
+};
+static inline byte_t key_value(GBKey key) {
+    return static_cast<std::underlying_type<GBKey>::type>(key);
+}
+
+class SDLController: public Device  {
 public:
     SDLController(void);
-    ~SDLController(void);
+    virtual ~SDLController(void);
 
     void handle_key(const SDL_Event *event);
 
-    virtual byte_t get_buttons(void) const { return _keys & 0x0F; };
-    virtual byte_t get_arrows(void) const { return (_keys >> 4) & 0x0F; };
+    virtual void reset() {
+        _value = 0x00;
+    }
+    virtual bool valid(addr_t addr) {
+        return (addr == CtrlReg::KEYS);
+    }
+    virtual byte_t *direct(addr_t addr) {
+        return NULL;
+    }
+    virtual void write(addr_t addr, byte_t arg) {
+        // XXX: We need to OR the keys if both are set.
+        if (bit_isset(arg, ButtonsSelect))
+            arg = (arg & 0xF0) | ((_keys & 0xF0) >> 4);
+        if (bit_isset(arg, ArrowSelect))
+            arg = (arg & 0xF0) | (_keys & 0x0F);
+        _value = arg;
+    }
+    virtual byte_t read(addr_t addr) {
+        return _value;
+    }
 
 private:
 
     SDLKey _key_map[8];
     byte_t _keys;
+    byte_t _value;
 };
 
 };

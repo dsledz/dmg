@@ -22,48 +22,51 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+/*
+ * Memory bank Controller
+ */
 #pragma once
 
-#include <memory>
-
-#include "SDL/sdl.h"
-
 #include "cpu.h"
+#include <string>
+#include <algorithm>
 
 namespace DMG {
 
-class VideoException: protected EmuException {
-public:
-    VideoException() {};
+enum Cartridge {
+    RomOnly = 0x00,
+    MBC1O   = 0x01,
+    MBC1R   = 0x02,
+    MBC1RB  = 0x03,
 };
 
-struct surface_deleter {
-    void operator ()(SDL_Surface *p) { if (p) SDL_FreeSurface(p); };
-};
+class MBC1: public MBC {
+    public:
+        MBC1(void): _rom_bank(1) {
+            _rom.resize(0);
+        }
+        virtual ~MBC1(void) { }
 
-typedef std::unique_ptr<SDL_Surface, surface_deleter> surface_ptr;
+        virtual void load(const std::string &name);
 
-class SDLDisplay: public DMG::Video {
-public:
-    SDLDisplay(void);
-    ~SDLDisplay(void);
+        virtual void reset(void);
+        virtual bool valid(addr_t addr);
+        virtual void write(addr_t addr, byte_t value);
+        virtual byte_t read(addr_t addr);
 
-    virtual void reset(void);
-    virtual bool valid(addr_t addr);
-    virtual void write(addr_t addr, byte_t value);
-    virtual byte_t read(addr_t addr);
-
-    virtual void render(void);
-
-private:
-    inline byte_t &rget(addr_t reg) {
-        return _reg[reg - VideoReg::LCDC];
-    }
-    bvec _vram;
-    bvec _oam;
-    bvec _reg;
-    surface_ptr _window;
+    private:
+        std::string _name;
+        Cartridge   _type;
+        unsigned    _rom_bank;
+        unsigned    _rom_size;
+        unsigned    _rom_high;
+        unsigned    _rom_low;
+        bvec        _rom;
+        unsigned    _ram_bank;
+        unsigned    _ram_size;
+        unsigned    _ram_high;
+        unsigned    _ram_low;
+        bvec        _ram;
 };
 
 };

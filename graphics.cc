@@ -42,6 +42,8 @@ enum Color {
 };
 
 unsigned global_palette[] = { Color0, Color1, Color2, Color3 };
+unsigned obj0_palette[] = { ColorZ, Color1, Color2, Color3 };
+unsigned obj1_palette[] = { ColorZ, Color1, Color2, Color3 };
 
 #define SCREEN_POSX 64
 #define SCREEN_POSY 64
@@ -177,8 +179,7 @@ class Sprite {
     public:
         Sprite(void) { }
         ~Sprite(void) { }
-        void init(unsigned idx, const byte_t *ram, const byte_t *oam) {
-            byte_t lcdc = ram[CtrlReg::LCDC];
+        void init(unsigned idx, bool large, const byte_t *oam, const byte_t *vram) {
             _Y = oam[Oam::OamY];
             _X = oam[Oam::OamX];
             _pattern = oam[Oam::OamPattern];
@@ -187,13 +188,13 @@ class Sprite {
             unsigned palette[4];
 
             if (bit_isset(_flags, OAMFlags::SpritePalette))
-                convert_palette(palette, ram[CtrlReg::OBP1], true);
+                memcpy(palette, obj1_palette, sizeof(palette));
             else
-                convert_palette(palette, ram[CtrlReg::OBP0], true);
+                memcpy(palette, obj0_palette, sizeof(palette));
 
             // XXX: Handle transparency
 
-            if (bit_isset(lcdc, LCDCBits::OBJSize)) {
+            if (large) {
                 _pattern &= 0xFE;
                 _sprite = create_surface(8, 16, true);
             } else
@@ -203,15 +204,14 @@ class Sprite {
             unsigned *pixels = (unsigned *)_sprite->pixels;
 
             // Handle first half of the sprite
-            const byte_t *data = &ram[Mem::ObjTiles];
-            data += _pattern * 16;
+            const byte_t *data = &vram[_pattern * 16];
             for (unsigned i = 0; i < 8; i++) {
                 convert_line(&pixels[i * _sprite->w], *data++, *data++,
                     palette, false);
             }
 
             // Handle second block
-            if (bit_isset(lcdc, LCDCBits::OBJSize)) {
+            if (large) {
                 for (unsigned i = 0; i < 8; i++)
                     convert_line(&pixels[(i + 8) * _sprite->w],
                         *data++, *data++, palette, false);
@@ -346,6 +346,12 @@ blit_window(SDL_Surface *screen, SDL_Surface *win, short wx, short wy)
 
 SDLDisplay::SDLDisplay(void)
 {
+    _vram.resize(0x2000);
+    _oam.resize(0x00A0);
+    _reg.resize(0x0010);
+
+    reset();
+
     _window = surface_ptr(SDL_SetVideoMode(
         292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF));
     if (_window == NULL)
@@ -367,19 +373,78 @@ SDLDisplay::~SDLDisplay(void)
 }
 
 void
-SDLDisplay::render(const byte_t *ram)
+SDLDisplay::reset(void)
 {
-    byte_t lcdc = ram[CtrlReg::LCDC];
+    memset(&_vram[0], 0, _vram.size());
+    memset(&_oam[0], 0, _oam.size());
+    write(VideoReg::LCDC, 0x91);
+    write(VideoReg::SCY, 0x00);
+    write(VideoReg::SCX, 0x00);
+    write(VideoReg::LYC, 0x00);
+    write(VideoReg::BGP, 0xFC);
+    write(VideoReg::OBP0, 0xFF);
+    write(VideoReg::OBP1, 0xFF);
+    write(VideoReg::WY, 0x00);
+    write(VideoReg::WX, 0x00);
+}
+
+bool
+SDLDisplay::valid(addr_t addr)
+{
+    return ((addr >= 0x8000 && addr < 0xA000) ||
+            (addr >= 0xFF40 && addr <= 0xFF4B) ||
+            (addr >= 0xFE00 && addr <= 0xFEA0));
+}
+
+void
+SDLDisplay::write(addr_t addr, byte_t arg)
+{
+    if (addr >= 0x8000 && addr < 0xA000) {
+        _vram[addr - 0x8000] = arg;
+    } else if (addr >= 0xFF40 && addr <= 0xFF4B) {
+        switch (addr) {
+        case VideoReg::OBP0:
+            convert_palette(obj0_palette, arg, true);
+            break;
+        case VideoReg::OBP1:
+            convert_palette(obj1_palette, arg, true);
+            break;
+        default:
+            break;
+        }
+        rget(addr) = arg;
+    } else if (addr >= 0xFE00 && addr <= 0xFEA0) {
+        _oam[addr - 0xFE00] = arg;
+    }
+}
+
+byte_t
+SDLDisplay::read(addr_t addr)
+{
+    if (addr >= 0x8000 && addr < 0xA000) {
+        return _vram[addr - 0x8000];
+    } else if (addr >= 0xFF40 && addr <= 0xFF4B) {
+        return _reg[addr - VideoReg::LCDC];
+    } else if (addr >= 0xFE00 && addr <= 0xFEA0) {
+        return _oam[addr - 0xFE00];
+    }
+    return 0;
+}
+
+void
+SDLDisplay::render(void)
+{
+    byte_t lcdc = rget(VideoReg::LCDC);
 
     if (!bit_isset(lcdc, LCDCBits::LCDEnabled))
         return;
 
     surface_ptr screen = create_surface(SCREEN_W, SCREEN_H, false);
 
-    TileMap bg_tiles(ram[CtrlReg::BGP]);
-    bg_tiles.init(&ram[0x8800], false);
-    TileMap obj_tiles(ram[CtrlReg::BGP]);
-    obj_tiles.init(&ram[0x8000], true);
+    TileMap bg_tiles(rget(VideoReg::BGP));
+    bg_tiles.init(&_vram[0x0800], false);
+    TileMap obj_tiles(rget(VideoReg::BGP));
+    obj_tiles.init(&_vram[0x0000], true);
 
     TileMap *tiles;
     if (bit_isset(lcdc, LCDCBits::BGTileData))
@@ -389,26 +454,26 @@ SDLDisplay::render(const byte_t *ram)
 
     if (bit_isset(lcdc, LCDCBits::BGDisplay)) {
         const byte_t *map = bit_isset(lcdc, LCDCBits::BGTileMap) ?
-            &ram[0x9C00] : &ram[0x9800];
+            &_vram[0x1C00] : &_vram[0x1800];
         surface_ptr bg(create_map(tiles, map));
-        short scx = ram[CtrlReg::SCX];
-        short scy = ram[CtrlReg::SCY];
+        short scx = rget(VideoReg::SCX);
+        short scy = rget(VideoReg::SCY);
         blit_bg(screen.get(), bg.get(), scx, scy);
     }
 
     if (bit_isset(lcdc, LCDCBits::WindowDisplay)) {
         const byte_t *map = bit_isset(lcdc, LCDCBits::WindowTileMap) ?
-            &ram[0x9C00] : &ram[0x9800];
+            &_vram[0x1C00] : &_vram[0x1800];
         surface_ptr win(create_map(tiles, map));
-        short wx = ram[CtrlReg::WX];
-        short wy = ram[CtrlReg::WY];
+        short wx = rget(VideoReg::WX);
+        short wy = rget(VideoReg::WY);
         blit_window(screen.get(), win.get(), wx, wy);
     }
 
-    const byte_t *oam = &ram[0xFE00];
+    const byte_t *oam = &_oam[0];
     Sprite sprites[40];
     for (unsigned i = 0; i < 40; i++) {
-        sprites[i].init(i, ram, oam);
+        sprites[i].init(i, bit_isset(lcdc, LCDCBits::OBJSize), oam, &_vram[0]);
         oam += 4;
     }
 
