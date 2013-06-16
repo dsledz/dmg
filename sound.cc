@@ -238,7 +238,7 @@ SDLAudio::generate(Channel &channel, bvec &data, int len)
     data.resize(len);
     // Handle the sweep register
     for (unsigned i = 0; i < len; i++)
-        data[i] = sample_sound(channel) * 8;
+        data[i] = sample_sound(channel);
 }
 
 void
