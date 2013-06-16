@@ -29,6 +29,10 @@
 #include <iomanip>
 #include <type_traits>
 #include <vector>
+#include <list>
+#include <stdexcept>
+
+#include <cassert>
 
 typedef unsigned char byte_t;
 typedef char sbyte_t;
@@ -102,28 +106,43 @@ static inline bool bit_isset(word_t arg, T bit)
  * |_____/_/\_\___\___| .__/ \__|_|\___/|_| |_|___/
  *                    |_|
  */
-class EmuException {
+class EmuException: public std::exception {
 public:
     EmuException() {};
 };
 
-class CpuException: protected EmuException {
+class CpuException: public EmuException {
 public:
     CpuException() {};
 };
 
-class OpcodeException: protected EmuException {
+class MemException: public EmuException {
+public:
+    MemException(addr_t addr): address(addr) {};
+    addr_t address;
+};
+
+class OpcodeException: public EmuException {
 public:
     OpcodeException(byte_t op): _op(op) { };
 private:
     byte_t _op;
 };
 
-class RomException: protected EmuException {
+class RomException: public EmuException {
 public:
     RomException(const std::string &name): rom(name) {};
     std::string rom;
 };
+
+/*  _   _      _
+ * | | | | ___| |_ __   ___ _ __ ___
+ * | |_| |/ _ \ | '_ \ / _ \ '__/ __|
+ * |  _  |  __/ | |_) |  __/ |  \__ \
+ * |_| |_|\___|_| .__/ \___|_|  |___/
+ *              |_|
+ */
+void read_rom(const std::string &name, bvec &rom);
 
 enum class IME {
     Disabled = 0,
@@ -168,30 +187,18 @@ enum Oam {
     OamFlags = 3,
 };
 
-const addr_t SoundRegStart = 0xFF00;
-const addr_t SoundRegEnd = 0xFF3F;
-
-enum SoundReg {
-    NR10 = 0xFF10,
-    NR11 = 0xFF11,
-    NR12 = 0xFF12,
-    NR13 = 0xFF13,
-    NR14 = 0xFF14,
-    NR21 = 0xFF16,
-    NR22 = 0xFF17,
-    NR23 = 0xFF18,
-    NR24 = 0xFF19,
-    NR30 = 0xFF1A,
-    NR31 = 0xFF1B,
-    NR32 = 0xFF1C,
-    NR33 = 0xFF1E,
-    NR41 = 0xFF20,
-    NR42 = 0xFF21,
-    NR43 = 0xFF22,
-    NR44 = 0xFF23,
-    NR50 = 0xFF24,
-    NR51 = 0xFF25,
-    NR52 = 0xFF26,
+enum VideoReg {
+    LCDC = 0xFF40,
+    STAT = 0xFF41,
+    SCY  = 0xFF42,
+    SCX  = 0xFF43,
+    LY   = 0xFF44,
+    LYC  = 0xFF45,
+    BGP  = 0xFF47,
+    OBP0 = 0xFF48,
+    OBP1 = 0xFF49,
+    WY   = 0xFF4A,
+    WX   = 0xFF4B,
 };
 
 enum CtrlReg {
@@ -200,90 +207,134 @@ enum CtrlReg {
     TIMA = 0xFF05,
     TMA  = 0xFF06,
     TAC  = 0xFF07,
-    LCDC = 0xFF40,
-    STAT = 0xFF41,
-    SCY  = 0xFF42,
-    SCX  = 0xFF43,
-    LY   = 0xFF44,
-    LYC  = 0xFF45,
+    IF   = 0xFF0F,
     DMA  = 0xFF46,
-    BGP  = 0xFF47,
-    OBP0 = 0xFF48,
-    OBP1 = 0xFF49,
-    WY   = 0xFF4A,
-    WX   = 0xFF4B,
     DMG_RESET = 0xFF50,
     IE   = 0xFFFF,
-    IF   = 0xFF0F,
 };
 
-enum Cartridge {
-    RomOnly = 0x00,
-    MBC1    = 0x01,
-    MBC1R   = 0x02,
-    MBC1RB  = 0x03,
-};
-
-enum RomSize {
-    Banks0    = 0x00,
-    Banks4    = 0x01,
-    Banks8    = 0x02,
-    Banks16   = 0x03,
-    Banks32   = 0x04,
-    Banks64   = 0x05,
-    Banks128  = 0x06,
-    Banks256  = 0x07,
-    Banks72   = 0x52,
-    Banks80   = 0x53,
-    Banks96   = 0x54,
-};
-
-enum RamSize {
-    Ram0     = 0x00,
-    Ram1     = 0x01,
-    Ram2     = 0x02,
-    Ram3     = 0x03,
-};
-
-enum class GBKey {
-    A = 0,
-    B = 1,
-    Select = 2,
-    Start = 3,
-    Right = 4,
-    Left = 5,
-    Up = 6,
-    Down = 7,
-    None = 8,
-    Size = 8,
-};
-static inline byte_t key_value(GBKey key) {
-    return static_cast<std::underlying_type<GBKey>::type>(key);
-}
-
-class Audio {
+class Device {
 public:
-    Audio() { };
+    virtual ~Device(void) { };
+    virtual void reset(void) = 0;
+    virtual bool valid(addr_t addr) = 0;
+    virtual void write(addr_t addr, byte_t value) = 0;
+    virtual byte_t read(addr_t addr) = 0;
+};
 
-    virtual void set(addr_t addr, byte_t arg) { };
-    virtual void sound(const byte_t *ram) { };
+class MBC: public Device {
+public:
+    virtual ~MBC(void) { }
+    virtual void load(const std::string &name) = 0;
+};
+
+class Video: public Device {
+public:
+    virtual void render(void) = 0;
+};
+
+class SimpleMap: public Device {
+public:
+    ~SimpleMap(void) {};
+    SimpleMap(addr_t start, addr_t end): _start(start), _end(end) {
+        _ram.resize(end + 1 - start);
+    }
+    SimpleMap(addr_t start, bvec &initial): _start(start) {
+        _ram = initial;
+        _end = _start + _ram.size();
+    }
+    virtual void reset(void) {
+        memset(&_ram[0], 0, _ram.size());
+    }
+    virtual bool valid(addr_t addr) {
+        return (addr >= _start && addr <= _end);
+    }
+    virtual void write(addr_t addr, byte_t value) {
+        _ram[addr - _start] = value;
+    }
+    virtual byte_t read(addr_t addr) {
+        return _ram[addr - _start];
+    }
+private:
+    addr_t _start;
+    addr_t _end;
+    bvec _ram;
+};
+
+class RamDevice: public Device {
+public:
+    ~RamDevice(void) {};
+    RamDevice(void) {
+        _ram.resize(0x4000);
+    }
+    virtual void reset(void) {
+        memset(&_ram[0], 0, _ram.size());
+    }
+    virtual bool valid(addr_t addr) {
+        return (addr >= 0xC000 && addr < 0xFE00);
+    }
+    virtual void write(addr_t addr, byte_t value) {
+        addr -= 0xC000;
+        _ram[addr] = value;
+        _ram[addr ^ 0x2000] = value;
+    }
+    virtual byte_t read(addr_t addr) {
+        return _ram[addr - 0xC000];
+    }
+private:
+    bvec _ram;
+};
+
+class MemoryBus {
+public:
+    MemoryBus(void) {}
+    ~MemoryBus(void) {}
+
+    void reset(void) {
+        for_each(_maps.begin(), _maps.end(), [](Device *map){map->reset();});
+    }
+    void add_map(Device *map){
+        _maps.push_front(map);
+    }
+
+    void remove_map(Device *map) {
+        _maps.remove(map);
+    }
+
+    inline void write(addr_t addr, byte_t value) {
+        switch (addr) {
+        case CtrlReg::DMG_RESET: {
+            _maps.remove(find(0));
+            break;
+        }
+        case CtrlReg::DMA: {
+            addr_t dest_addr = Mem::OAMTable;
+            auto dest = find(Mem::OAMTable);
+            addr_t src_addr = (addr_t)value << 8;
+            auto src = find(src_addr);
+            for (unsigned i = 0; i < 160; i++)
+                dest->write(dest_addr + i, src->read(src_addr + i));
+            break;
+        }
+        default:
+            find(addr)->write(addr, value);
+            break;
+        }
+    }
+
+    inline byte_t read(addr_t addr) {
+        return find(addr)->read(addr);
+    }
 
 private:
-};
-
-class Video {
-public:
-    Video() { };
-
-    virtual void render(const byte_t *ram) { };
-};
-
-class Controller {
-public:
-    Controller() { };
-
-    virtual byte_t get_buttons(void) const { return 0x0F; };
-    virtual byte_t get_arrows(void) const { return 0x0F; };
+    inline Device *find(addr_t addr) {
+        auto it = std::find_if(_maps.begin(), _maps.end(),
+            [=](Device *map) -> bool { return map->valid(addr); });
+        if (it == _maps.end())
+            throw MemException(addr);
+        return *it;
+    }
+    std::list<Device *> _maps;
 };
 
 class Cpu {
@@ -297,10 +348,18 @@ public:
     void step(void);
 
     void load_rom(const std::string &name);
-    void set_video(Video *video) { _video = video; };
-    void set_control(Controller *control) { _control = control; };
-    void set_audio(Audio *audio) { _audio = audio; };
-    void set_key(GBKey key, bool set);
+    void set_video(Video *video) {
+        _bus.remove_map(_video);
+        _bus.add_map(video);
+        _video = video;
+    };
+    void add_mapper(Device *map) {
+        _bus.add_map(map);
+    }
+    void remove_mapper(Device *map) {
+        _bus.remove_map(map);
+    }
+
     void toggle_debug(void) { _debug = !_debug; };
     void dump(void);
 
@@ -325,7 +384,6 @@ protected:
     void interrupt(void);
     void video();
     void timer();
-    void audio();
 
     inline void _trigger(Interrupt i) {
         byte_t ifreg = _read(CtrlReg::IF);
@@ -400,8 +458,10 @@ protected:
     byte_t _fetch(Register reg);
     void _store(Register reg, byte_t value);
     word_t _fetchw(Register reg);
+
     void _write(addr_t addr, byte_t value);
-    byte_t _read(addr_t addr) const;
+    byte_t _read(addr_t addr);
+
     inline void _tick(unsigned cycles) {
         _cycles += cycles;
         _fcycles += cycles;
@@ -452,7 +512,6 @@ protected:
         return tmp;
     }
 
-    void _read_rom(const std::string &name, bvec &rom);
     void _dump_reg(std::ostream &os) const;
 
 private:
@@ -521,24 +580,14 @@ private:
 
     bvec _rom;
 
-    Video _null_video;
     Video *_video;
 
-    Controller _null_controller;
-    Controller *_control;
-
-    Audio _null_audio;
-    Audio *_audio;
+    Device *_boot_rom; //XXX: unique_ptr
 
     // XXX: debug
     bool _debug;
 
-    Cartridge _type;
-    RomSize _rom_size;
-    RamSize _ram_size;
-    std::string _name;
-
-    bvec _mem;
+    MemoryBus _bus;
 };
 
 enum LCDCBits {

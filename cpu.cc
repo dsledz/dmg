@@ -35,6 +35,8 @@
 #include <vector>
 #include <algorithm>
 
+#include "mbc.h"
+
 using namespace DMG;
 
 #define DEFAULT_ROM (32*1024)
@@ -43,17 +45,20 @@ using namespace DMG;
 Cpu::Cpu(void): _rAF(0), _rBC(0), _rDE(0), _rHL(0), _rSP(0), _rPC(0),
     _ime(IME::Disabled), _state(State::Running),
     _cycles(0), _fcycles(0), _dcycles(0), _tcycles(0),
-    _video(&_null_video),
-    _control(&_null_controller),
-    _audio(&_null_audio),
-    _debug(false)
+    _video(NULL),
+    _boot_rom(NULL),
+    _debug(false),
+    _bus()
 {
-    _mem.resize(MEM_SIZE);
     _rom.resize(0);
 }
 
 Cpu::~Cpu(void)
 {
+    if (_boot_rom != NULL) {
+        delete _boot_rom;
+        _boot_rom = NULL;
+    }
 }
 
 #ifdef EQUAL_rFAST
@@ -87,11 +92,13 @@ bool Cpu::operator == (const Cpu &rhs) const
     EQ(_rL, rhs._rL);
     EQ(_rSP, rhs._rSP);
     EQ(_rPC, rhs._rPC);
+#if 0
     for (unsigned i = 0; i < _mem.size(); i++)
         if (_read(i) != rhs._read(i)) {
             std::cout << "Memory differences at: " << Print(i) << std::endl;
             EQ(_read(i), rhs._read(i));
         }
+#endif
     return true;
 }
 #endif
@@ -546,10 +553,6 @@ void Cpu::_stop()
 
 void Cpu::dump(void)
 {
-    std::cout << "Cartridge Header" << std::endl;
-    std::cout << "Name: " << _name << std::endl;
-    std::cout << "MBC: " << Print(_type) << std::endl;
-    std::cout << "Rom Size: " << Print(_rom_size) << std::endl;
 
     _dump_reg(std::cout);
 }
@@ -1092,74 +1095,14 @@ void Cpu::test_step(unsigned steps)
         step();
 }
 
-byte_t Cpu::_read(addr_t addr) const
+byte_t Cpu::_read(addr_t addr)
 {
-    return _mem[addr];
+    return _bus.read(addr);
 }
 
 void Cpu::_write(addr_t addr, byte_t arg)
 {
-    if (addr >= 0xFF80) {
-        // Internal RAM
-    } else if (addr >= 0xFF00) {
-        // I/O
-        switch (addr) {
-        case CtrlReg::KEYS:
-            // copy current keys
-            if ((arg & 0x10) == 0)
-                arg = (arg & 0xF0) | _control->get_arrows();
-            else if ((arg & 0x20) == 0)
-                arg = (arg & 0xF0) | _control->get_buttons();
-            break;
-        case CtrlReg::DMG_RESET:
-            // Nuke the DMG ROM
-            memcpy(&_mem[0], &_rom[0], 256);
-            break;
-        case CtrlReg::DMA: {
-            // Start the DMA transfer
-            addr_t dest = Mem::OAMTable;
-            addr_t src = (addr_t)arg << 8;
-            memcpy(&_mem[dest], &_mem[src], 40*4);
-            break;
-        }
-        default:
-            if (addr >= SoundRegStart && addr <= SoundRegEnd)
-                _audio->set(addr, arg);
-            break;
-        }
-    } else if (addr >= 0xFEA0) {
-        // Empty I/O
-    } else if (addr >= 0xFE00) {
-        // Sprite Attrib Memory
-    } else if (addr >= 0xE000) {
-        // Echo of 8kb Internal RAM
-    } else if (addr >= 0xC000) {
-        // Internal RAM
-        // XXX: his should be 0xDE00
-        if (addr <= 0xCE00)
-            _mem[addr + 0x2000] = arg;
-    } else if (addr >= 0xA000) {
-        // switchable RAM bank
-    } else if (addr >= 0x8000) {
-        // Video RAM
-    } else if (addr >= 0x6000) {
-        return;
-    } else if (addr >= 0x4000) {
-        return;
-    } else if (addr >= 0x2000) {
-        arg &= 0x1f;
-        if (arg == 0)
-            arg = 1;
-        unsigned rom_addr = arg * 0x4000;
-        if (_debug)
-            std::cout << " loading " << Print(rom_addr);
-        if (rom_addr < _rom.size())
-            memcpy(&_mem[0x4000], &_rom[rom_addr], 0x4000);
-        return;
-    } else {
-        return;
-    }
-    _mem[addr] = arg;
+    _bus.write(addr, arg);
 }
 
 /*
@@ -1184,76 +1127,32 @@ void Cpu::reset(void)
     _rSP = 0xFFFE;
     _rPC = 0x0000;
 
-    memset(&_mem[0], 0, _mem.size());
+    _bus.reset();
 
     _write(CtrlReg::TIMA, 0x00);
     _write(CtrlReg::TMA, 0x00);
     _write(CtrlReg::TAC, 0x00);
-    _write(SoundReg::NR10, 0x80);
-    _write(SoundReg::NR11, 0xBF);
-    _write(SoundReg::NR12, 0xF3);
-    _write(SoundReg::NR14, 0xBF);
-    _write(SoundReg::NR21, 0x3F);
-    _write(SoundReg::NR22, 0x00);
-    _write(SoundReg::NR24, 0xBF);
-    _write(SoundReg::NR30, 0x7F);
-    _write(SoundReg::NR31, 0xFF);
-    _write(SoundReg::NR32, 0x9F);
-    _write(SoundReg::NR33, 0xBF);
-    _write(SoundReg::NR41, 0xFF);
-    _write(SoundReg::NR42, 0x00);
-    _write(SoundReg::NR43, 0x00);
-    _write(SoundReg::NR44, 0xBF);
-    _write(SoundReg::NR50, 0x77);
-    _write(SoundReg::NR51, 0xF3);
-    _write(SoundReg::NR52, 0xF1);
-    _write(CtrlReg::LCDC, 0x91);
-    _write(CtrlReg::SCY, 0x00);
-    _write(CtrlReg::SCX, 0x00);
-    _write(CtrlReg::LYC, 0x00);
-    _write(CtrlReg::BGP, 0xFC);
-    _write(CtrlReg::OBP0, 0xFF);
-    _write(CtrlReg::OBP1, 0xFF);
-    _write(CtrlReg::WY, 0x00);
-    _write(CtrlReg::WX, 0x00);
     _write(CtrlReg::IF, 0x00);
     _write(CtrlReg::IE, 0x00);
-
-    _audio->sound(&_mem[0]);
-
-    if (_rom.size() != 0) {
-        // std::max(32*1024, _rom.size())
-        memcpy(&_mem[0x0000], &_rom[0], DEFAULT_ROM);
-    }
 
     // Load the boot rom (if it exists)
     try {
         bvec boot;
-        _read_rom("boot_dmg.gb", boot);
-        memcpy(&_mem[0x0000], &boot[0], boot.size());
+        read_rom("boot_dmg.gb", boot);
+        _boot_rom = new SimpleMap(0, boot);
+        _bus.add_map(_boot_rom);
     } catch (RomException &e) {
         _rPC = 0x0100;
     }
 
-    // Cartridge Header
-    _name.clear();
-    for (unsigned i = 0x0134; i < 0x0142; i++)
-        _name += _read(i);
-
-    if ((_read(0x0143) & 0xC0) == 0xC0)
-        std::cout << "Color Gameboy Only" << std::endl;
-
-    _type = static_cast<Cartridge>(_read(0x0147));
-    _rom_size = static_cast<RomSize>(_read(0x0148));
-    _ram_size = static_cast<RamSize>(_read(0x0149));
 }
 
 void Cpu::load_rom(const std::string &name)
 {
-    _read_rom(name, _rom);
+    read_rom(name, _rom);
 }
 
-void Cpu::_read_rom(const std::string &name, bvec &rom)
+void DMG::read_rom(const std::string &name, bvec &rom)
 {
     struct stat sb;
     if (stat(name.c_str(), &sb) == -1)
@@ -1331,15 +1230,10 @@ void Cpu::interrupt(void)
     }
 }
 
-void Cpu::audio(void)
-{
-    _audio->sound(&_mem[0]);
-}
-
 void Cpu::video(void)
 {
-    byte_t stat = _read(CtrlReg::STAT);
-    byte_t ly = _read(CtrlReg::LY);
+    byte_t stat = _read(VideoReg::STAT);
+    byte_t ly = _read(VideoReg::LY);
 
     switch (stat & 0x03) {
     case LCDMode::HBlankMode:
@@ -1348,16 +1242,17 @@ void Cpu::video(void)
             _fcycles -= H_BLANK_CYCLES;
 
             ly = (ly + 1) % SCANLINES;
-            _write(CtrlReg::LY, ly);
+            _write(VideoReg::LY, ly);
             if (ly == DISPLAY_LINES) {
                 // Wait until our frame is finished
-                _video->render(&_mem[0]);
+                if (_video)
+                    _video->render();
                 _trigger(Interrupt::VBlank);
                 stat = (stat & 0xfc) | LCDMode::VBlankMode;
             } else {
                 stat = (stat & 0xfc) | LCDMode::OAMMode;
             }
-            _write(CtrlReg::STAT, stat);
+            _write(VideoReg::STAT, stat);
         }
         break;
     case LCDMode::OAMMode:
@@ -1365,7 +1260,7 @@ void Cpu::video(void)
             // Transition to Active
             _fcycles -= OAM_CYCLES;
             stat = (stat & 0xfc) | LCDMode::ActiveMode;
-            _write(CtrlReg::STAT, stat);
+            _write(VideoReg::STAT, stat);
         }
         break;
     case LCDMode::ActiveMode:
@@ -1373,7 +1268,7 @@ void Cpu::video(void)
             // Transition to HBlank
             _fcycles -= ACTIVE_CYCLES;
             stat = (stat & 0xfc) | LCDMode::HBlankMode;
-            _write(CtrlReg::STAT, stat);
+            _write(VideoReg::STAT, stat);
         }
         break;
     case LCDMode::VBlankMode:
@@ -1381,17 +1276,10 @@ void Cpu::video(void)
             // Transition to OAM
             _fcycles -= V_BLANK_CYCLES;
             stat = (stat & 0xfc) | LCDMode::OAMMode;
-            _write(CtrlReg::STAT, stat);
+            _write(VideoReg::STAT, stat);
         }
         break;
     }
-}
-
-void Cpu::set_key(GBKey key, bool set)
-{
-    // XXX: Where do we put this?
-    if (_state == State::Stopped)
-        _state = State::Running;
 }
 
 void Cpu::timer(void)

@@ -31,6 +31,7 @@
 #include "graphics.h"
 #include "sound.h"
 #include "control.h"
+#include "mbc.h"
 
 using namespace DMG;
 
@@ -42,20 +43,24 @@ class Emulator {
         Emulator(void) { }
         ~Emulator(void) { }
 
-        void load(const char *rom) {
-            const std::string name(rom);
-            std::cout << "Loading: " << name << std::endl;
-            _cpu.load_rom(name);
-        }
-
-        void run(void) {
+        void run(const std::string &name) {
             SDLDisplay display;
             SDLController control;
             SDLAudio audio;
-            _cpu.reset();
+            MBC1 rom;
+            RamDevice ram;
+            SimpleMap hiram(0xFF00, 0xFFFF);
+
+            std::cout << "Loading: " << name << std::endl;
+            rom.load(name);
+
+            _cpu.add_mapper(&rom);
+            _cpu.add_mapper(&ram);
+            _cpu.add_mapper(&hiram);
             _cpu.set_video(&display);
-            _cpu.set_control(&control);
-            _cpu.set_audio(&audio);
+            _cpu.add_mapper(&control);
+            _cpu.add_mapper(&audio);
+            _cpu.reset();
 
             while (!_stop) {
                 SDL_Event event;
@@ -66,8 +71,10 @@ class Emulator {
                     _cpu.step();
             }
             _cpu.set_video(NULL);
-            _cpu.set_control(NULL);
-            _cpu.set_audio(NULL);
+            _cpu.remove_mapper(&control);
+            _cpu.remove_mapper(&audio);
+            _cpu.remove_mapper(&ram);
+            _cpu.remove_mapper(&hiram);
         }
 
         void OnEvent(SDLController *control, SDL_Event *event) {
@@ -128,21 +135,19 @@ extern "C" int main(int argc, char **argv)
 
     Emulator emu;
     if (argc < 2) {
-        usage(argv[1]);
+        usage(argv[0]);
         return 0;
     }
 
     try {
-        emu.load(argv[1]);
+        emu.run(argv[1]);
     } catch (DMG::RomException &e) {
         std::cout << "Unable to read rom: " << e.rom << std::endl;
         return 1;
-    }
-
-    try {
-        emu.run();
     } catch (DMG::CpuException &e) {
         std::cout << "Exiting" << std::endl;
+    } catch (...) {
+        std::cout << "Unknown error" << std::endl;
     }
 
     return 0;
