@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) 2013, Dan Sledz
  * All rights reserved.
  *
@@ -22,72 +22,52 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+/*
+ * Memory bank Controller
+ */
 #pragma once
 
-#include "SDL/sdl.h"
-
 #include "cpu.h"
+#include <string>
+#include <algorithm>
 
 namespace DMG {
 
-enum KeysReg {
-    ButtonsSelect = 5,
-    ArrowSelect   = 4,
-    DownOrSelect  = 3,
-    UpOrSelect    = 2,
-    LeftOrB       = 1,
-    RightOrA      = 0,
+enum Cartridge {
+    RomOnly = 0x00,
+    MBC1O   = 0x01,
+    MBC1R   = 0x02,
+    MBC1RB  = 0x03,
 };
 
-enum class GBKey {
-    A = 0,
-    B = 1,
-    Select = 2,
-    Start = 3,
-    Right = 4,
-    Left = 5,
-    Up = 6,
-    Down = 7,
-    Size = 8,
-};
-static inline byte_t key_value(GBKey key) {
-    return static_cast<std::underlying_type<GBKey>::type>(key);
-}
+class MBC1: public MBC {
+    public:
+        MBC1(void): _rom_bank(1) {
+            _rom.resize(0);
+        }
+        virtual ~MBC1(void) { }
 
-class SDLController: public Controller  {
-public:
-    SDLController(void);
-    virtual ~SDLController(void);
+        virtual void load(const std::string &name);
 
-    void handle_key(const SDL_Event *event);
+        virtual void reset(void);
+        virtual bool valid(addr_t addr);
+        virtual void write(addr_t addr, byte_t value);
+        virtual byte_t read(addr_t addr);
+        virtual byte_t *direct(addr_t addr);
 
-    virtual void reset() {
-        _value = 0x00;
-    }
-    virtual bool valid(addr_t addr) {
-        return (addr == CtrlReg::KEYS);
-    }
-    virtual byte_t *direct(addr_t addr) {
-        return NULL;
-    }
-    virtual void write(addr_t addr, byte_t arg) {
-        // XXX: We need to OR the keys if both are set.
-        if (bit_isset(arg, ButtonsSelect))
-            arg = (arg & 0xF0) | ((_keys & 0xF0) >> 4);
-        if (bit_isset(arg, ArrowSelect))
-            arg = (arg & 0xF0) | (_keys & 0x0F);
-        _value = arg;
-    }
-    virtual byte_t read(addr_t addr) {
-        return _value;
-    }
-
-private:
-
-    SDLKey _key_map[8];
-    byte_t _keys;
-    byte_t _value;
+    private:
+        std::string _name;
+        Cartridge   _type;
+        unsigned    _rom_bank;
+        unsigned    _rom_size;
+        unsigned    _rom_high;
+        unsigned    _rom_low;
+        bvec        _rom;
+        unsigned    _ram_bank;
+        unsigned    _ram_size;
+        unsigned    _ram_high;
+        unsigned    _ram_low;
+        bvec        _ram;
 };
 
 };

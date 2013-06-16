@@ -34,6 +34,30 @@
 
 namespace DMG {
 
+enum SoundReg {
+    NR10 = 0xFF10,
+    NR11 = 0xFF11,
+    NR12 = 0xFF12,
+    NR13 = 0xFF13,
+    NR14 = 0xFF14,
+    NR21 = 0xFF16,
+    NR22 = 0xFF17,
+    NR23 = 0xFF18,
+    NR24 = 0xFF19,
+    NR30 = 0xFF1A,
+    NR31 = 0xFF1B,
+    NR32 = 0xFF1C,
+    NR33 = 0xFF1E,
+    NR41 = 0xFF20,
+    NR42 = 0xFF21,
+    NR43 = 0xFF22,
+    NR44 = 0xFF23,
+    NR50 = 0xFF24,
+    NR51 = 0xFF25,
+    NR52 = 0xFF26,
+    NRLast = 0xFF3F,
+};
+
 enum class NR51Bits {
     S4S02 = 7,
     S3S02 = 6,
@@ -87,12 +111,32 @@ class SDLAudio: public Audio {
         SDLAudio(void);
         ~SDLAudio(void);
 
-        virtual void set(addr_t addr, byte_t arg);
-        virtual void sound(const byte_t *ram);
+        virtual void reset(void);
+
+        virtual bool valid(addr_t addr) {
+            return (addr >= SoundReg::NR10 && addr <= SoundReg::NRLast);
+        };
+        virtual byte_t *direct(addr_t addr) {
+            return NULL;
+        };
+        virtual void write(addr_t addr, byte_t value) {
+            set(addr, value);
+        };
+        virtual byte_t read(addr_t addr) {
+            return _mem[addr - SoundReg::NR10];
+        }
 
         void mix(Uint8 *stream, int len);
     private:
 
+        inline byte_t & rget(enum SoundReg reg) {
+            return _mem[static_cast<addr_t>(reg - SoundReg::NR10)];
+        }
+        inline byte_t & rget(addr_t addr) {
+            return _mem[addr - SoundReg::NR10];
+        }
+
+        void set(addr_t addr, byte_t arg);
         void generate(Channel &channel, bvec &data, int len);
         void start_sound(Channel &channel);
         sbyte_t sample_sound(Channel &channel);
@@ -103,8 +147,8 @@ class SDLAudio: public Audio {
         Channel _Snd2;
         Channel _Snd3;
         Channel _Snd4;
-        byte_t _NR51;
-        byte_t _NR52;
+
+        bvec _mem;
 };
 
 };

@@ -44,6 +44,7 @@ struct AudioLock {
 
 SDLAudio::SDLAudio(void)
 {
+    _mem.resize(SoundReg::NRLast + 1 - SoundReg::NR10);
     SDL_AudioSpec fmt = { };
 
     fmt.freq = SAMPLES_PER_SEC;
@@ -64,6 +65,31 @@ SDLAudio::~SDLAudio(void)
     AudioLock lock;
     SDL_PauseAudio(1);
 }
+
+void
+SDLAudio::reset(void)
+{
+    memset(&_mem[0], 0, _mem.size());
+    set(SoundReg::NR10, 0x80);
+    set(SoundReg::NR11, 0xBF);
+    set(SoundReg::NR12, 0xF3);
+    set(SoundReg::NR14, 0xBF);
+    set(SoundReg::NR21, 0x3F);
+    set(SoundReg::NR22, 0x00);
+    set(SoundReg::NR24, 0xBF);
+    set(SoundReg::NR30, 0x7F);
+    set(SoundReg::NR31, 0xFF);
+    set(SoundReg::NR32, 0x9F);
+    set(SoundReg::NR33, 0xBF);
+    set(SoundReg::NR41, 0xFF);
+    set(SoundReg::NR42, 0x00);
+    set(SoundReg::NR43, 0x00);
+    set(SoundReg::NR44, 0xBF);
+    set(SoundReg::NR50, 0x77);
+    set(SoundReg::NR51, 0xF3);
+    set(SoundReg::NR52, 0xF1);
+}
+
 
 void
 SDLAudio::set(addr_t addr, byte_t arg)
@@ -92,7 +118,7 @@ SDLAudio::set(addr_t addr, byte_t arg)
         _Snd1.loop = (arg & 0x40) == 0;
         if (arg & 0x80) {
             start_sound(_Snd1);
-            bit_set(_NR52, NR52Bits::Sound1On, 1);
+            bit_set(rget(SoundReg::NR52), NR52Bits::Sound1On, 1);
         }
         break;
     case SoundReg::NR21:
@@ -112,23 +138,11 @@ SDLAudio::set(addr_t addr, byte_t arg)
         _Snd2.loop = (arg & 0x40) == 0;
         if (arg & 0x80) {
             start_sound(_Snd2);
-            bit_set(_NR52, NR52Bits::Sound2On, 1);
+            bit_set(rget(SoundReg::NR52), NR52Bits::Sound2On, 1);
         }
         break;
-    case SoundReg::NR51:
-        _NR51 = arg;
-        break;
-    case SoundReg::NR52:
-        _NR52 = arg;
-        break;
     };
-}
-
-void
-SDLAudio::sound(const byte_t *ram)
-{
-    for (addr_t addr = SoundRegStart; addr < SoundRegEnd; addr++)
-        set(addr, ram[addr]);
+    rget(addr) = arg;
 }
 
 void
@@ -136,7 +150,7 @@ SDLAudio::mix(Uint8 *stream, int len)
 {
     bvec buf;
 
-    if (!bit_isset(_NR52, NR52Bits::AllOn))
+    if (!bit_isset(rget(SoundReg::NR52), NR52Bits::AllOn))
         return;
 
     if (_Snd1.on) {

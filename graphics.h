@@ -49,9 +49,21 @@ public:
     SDLDisplay(void);
     ~SDLDisplay(void);
 
-    virtual void render(const byte_t *ram);
+    virtual void reset(void);
+    virtual bool valid(addr_t addr);
+    virtual void write(addr_t addr, byte_t value);
+    virtual byte_t read(addr_t addr);
+    virtual byte_t *direct(addr_t addr);
+
+    virtual void render(void);
 
 private:
+    inline byte_t &rget(addr_t reg) {
+        return _reg[reg - VideoReg::LCDC];
+    }
+    bvec _vram;
+    bvec _oam;
+    bvec _reg;
     surface_ptr _window;
 };
 
