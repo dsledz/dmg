@@ -44,12 +44,15 @@ using namespace DMG;
 
 Cpu::Cpu(void): _rAF(0), _rBC(0), _rDE(0), _rHL(0), _rSP(0), _rPC(0),
     _ime(IME::Disabled), _state(State::Running),
-    _cycles(0), _fcycles(0), _dcycles(0), _tcycles(0),
+    _icycles(0), _cycles(0),
     _video(NULL),
     _boot_rom(NULL),
-    _debug(false),
-    _bus()
+    _bus(),
+    _clock(&_bus),
+    _debug(false)
 {
+    _bus.add_map(this);
+    _bus.add_map(&_clock);
 }
 
 Cpu::~Cpu(void)
@@ -60,18 +63,6 @@ Cpu::~Cpu(void)
     }
 }
 
-#ifdef EQUAL_rFAST
-bool Cpu::operator ==(const Cpu &rhs) const
-{
-    return _rA == rhs._rA && _rF == rhs._rF &&
-        _rB == rhs._rB && _rC == rhs._rC &&
-        _rD == rhs._rD && _rE == rhs._rE &&
-        _rH == rhs._rH && _rL == rhs._rL &&
-        _rSP == rhs._rSP && _rPC == rhs._rPC &&
-        _flags.Z == rhs._flags.Z && _flags.C == rhs._flags.C &&
-        _mem == rhs._mem;
-}
-#else
 #define EQ(a, b) \
     if (a != b) { \
         std::cout << std::hex << "Mismatch '" #a "' Expected: " << Print(a) \
@@ -100,7 +91,62 @@ bool Cpu::operator == (const Cpu &rhs) const
 #endif
     return true;
 }
-#endif
+
+bool
+Cpu::valid(addr_t addr)
+{
+    switch (addr) {
+    case CtrlReg::IF:
+    case CtrlReg::IE:
+        return true;
+    }
+    return false;
+}
+
+void
+Cpu::write(addr_t addr, byte_t value)
+{
+    switch (addr) {
+    case CtrlReg::IF:
+        // XXX: Handle interrupts
+        _IF = value;
+        break;
+    case CtrlReg::IE:
+        _IE = value;
+        break;
+    }
+}
+
+byte_t
+Cpu::read(addr_t addr)
+{
+    switch (addr) {
+    case CtrlReg::IF:
+        return _IF;
+    case CtrlReg::IE:
+        return _IE;
+    }
+    return 0;
+}
+
+void Cpu::reset(void)
+{
+    _rA = 0x01;
+    _rF = 0xB0;
+    _rB = 0x00;
+    _rC = 0x13;
+    _rD = 0x00;
+    _rE = 0xD8;
+    _rH = 0x01;
+    _rL = 0x4D;
+    _rSP = 0xFFFE;
+    _rPC = 0x0000;
+    _ime = IME::Disabled;
+    _state = State::Running;
+    _IF = 0x00;
+    _IE = 0x00;
+}
+
 
 /*
  *  ___                       _   _
@@ -490,19 +536,14 @@ void Cpu::_jp(bool jump, word_t arg)
 void Cpu::_call(bool jump, word_t addr)
 {
     if (jump) {
-        _call(addr);
+        _push(_rPCh, _rPCl);
+
+        if (_debug) {
+            std::cout << "  <- " << Print(addr);
+        }
+        _rPC = addr;
         _tick(12);
     }
-}
-
-void Cpu::_call(word_t addr)
-{
-    _push(_rPCh, _rPCl);
-
-    if (_debug) {
-        std::cout << "  <- " << Print(addr);
-    }
-    _rPC = addr;
 }
 
 void Cpu::_ret(bool jump)
@@ -974,6 +1015,7 @@ void Cpu::step(void)
 {
     interrupt();
 
+    unsigned i = 0;
     switch (_state) {
     case State::Running:
         dispatch();
@@ -987,10 +1029,11 @@ void Cpu::step(void)
     case State::Fault:
         break;
     }
+    i = cycles();
 
-    video();
-    timer();
+    _clock.tick(i);
 
+    _video->tick(i);
 }
 
 void Cpu::set(Register r, word_t arg)
@@ -1112,27 +1155,9 @@ void Cpu::_write(addr_t addr, byte_t arg)
  *|_|   |_|  \___/ \__, |_|  \__,_|_| |_| |_|
  *                 |___/
  */
-
-void Cpu::reset(void)
+void Cpu::external_reset(void)
 {
-    _rA = 0x01;
-    _rF = 0xB0;
-    _rB = 0x00;
-    _rC = 0x13;
-    _rD = 0x00;
-    _rE = 0xD8;
-    _rH = 0x01;
-    _rL = 0x4D;
-    _rSP = 0xFFFE;
-    _rPC = 0x0000;
-
     _bus.reset();
-
-    _write(CtrlReg::TIMA, 0x00);
-    _write(CtrlReg::TMA, 0x00);
-    _write(CtrlReg::TAC, 0x00);
-    _write(CtrlReg::IF, 0x00);
-    _write(CtrlReg::IE, 0x00);
 
     // Load the boot rom (if it exists)
     try {
@@ -1160,28 +1185,6 @@ void DMG::read_rom(const std::string &name, bvec &rom)
     }
 }
 
-/*
- * __     ___     _
- * \ \   / (_) __| | ___  ___
- *  \ \ / /| |/ _` |/ _ \/ _ \
- *   \ V / | | (_| |  __/ (_) |
- *    \_/  |_|\__,_|\___|\___/
- */
-
-// 201 - 207
-#define H_BLANK_CYCLES 201
-// 77 - 83
-#define OAM_CYCLES 77
-// 169 - 175
-#define ACTIVE_CYCLES 169
-// 4560
-#define V_BLANK_CYCLES 4560
-
-#define SCANLINE_CYCLES 456
-
-#define SCANLINES 156
-#define DISPLAY_LINES 144
-
 addr_t InterruptVector[] = {
     0x40, /* Interrupt::VBlank */
     0x48, /* Interrupt::LCDStat */
@@ -1195,11 +1198,10 @@ addr_t InterruptVector[] = {
  */
 void Cpu::interrupt(void)
 {
-    byte_t flags = _read(CtrlReg::IF);
     if (_ime == IME::Disabled) {
         if (_state == State::Halted)
             for (unsigned i = 0; i < 5; i++)
-                if (bit_isset(flags, i))
+                if (bit_isset(_IF, i))
                     _state = State::Running;
         return;
     }
@@ -1207,15 +1209,13 @@ void Cpu::interrupt(void)
         _ime = IME::Enabled;
         return;
     }
-    byte_t enabled = _read(CtrlReg::IE);
     for (unsigned i = 0; i < 5; i++) {
-        if (bit_isset(flags, i) && bit_isset(enabled, i)) {
+        if (bit_isset(_IF, i) && bit_isset(_IE, i)) {
             _push(_rPCh, _rPCl);
             _rPC = InterruptVector[i];
             if (_debug)
                 std::cout << " Interrupt Triggered: " << i << std::endl;
-            bit_set(flags, i, false);
-            _write(CtrlReg::IF, flags);
+            bit_set(_IF, i, false);
             _tick(20);
             _ime = IME::Disabled;
             _state = State::Running;
@@ -1224,85 +1224,97 @@ void Cpu::interrupt(void)
     }
 }
 
-void Cpu::video(void)
+Clock::Clock(MemoryBus *bus): _bus(bus)
 {
-    byte_t stat = _read(VideoReg::STAT);
-    byte_t ly = _read(VideoReg::LY);
+}
 
-    switch (stat & 0x03) {
-    case LCDMode::HBlankMode:
-        if (_fcycles > H_BLANK_CYCLES) {
-            // Transition to VBlank or OAM
-            _fcycles -= H_BLANK_CYCLES;
+Clock::~Clock(void)
+{
+}
 
-            ly = (ly + 1) % SCANLINES;
-            _write(VideoReg::LY, ly);
-            if (ly == DISPLAY_LINES) {
-                // Wait until our frame is finished
-                if (_video)
-                    _video->render();
-                _trigger(Interrupt::VBlank);
-                stat = (stat & 0xfc) | LCDMode::VBlankMode;
-            } else {
-                stat = (stat & 0xfc) | LCDMode::OAMMode;
-            }
-            _write(VideoReg::STAT, stat);
-        }
+void
+Clock::reset(void)
+{
+    _cycles = 0;
+    _dcycles = 0;
+    _tcycles = 0;
+    _tima = 0;
+    _tma = 0;
+    _tac = 0;
+}
+
+bool
+Clock::valid(addr_t addr)
+{
+    return ((addr == CtrlReg::TIMA) || (addr == CtrlReg::TMA) ||
+            (addr == CtrlReg::TAC));
+}
+
+void
+Clock::write(addr_t addr, byte_t value)
+{
+    switch (addr) {
+    case CtrlReg::DIV:
+        _div = value;
         break;
-    case LCDMode::OAMMode:
-        if (_fcycles > OAM_CYCLES) {
-            // Transition to Active
-            _fcycles -= OAM_CYCLES;
-            stat = (stat & 0xfc) | LCDMode::ActiveMode;
-            _write(VideoReg::STAT, stat);
-        }
+    case CtrlReg::TIMA:
+        _tima = value;
         break;
-    case LCDMode::ActiveMode:
-        if (_fcycles > ACTIVE_CYCLES) {
-            // Transition to HBlank
-            _fcycles -= ACTIVE_CYCLES;
-            stat = (stat & 0xfc) | LCDMode::HBlankMode;
-            _write(VideoReg::STAT, stat);
-        }
+    case CtrlReg::TMA:
+        _tma = value;
         break;
-    case LCDMode::VBlankMode:
-        if (_fcycles > V_BLANK_CYCLES) {
-            // Transition to OAM
-            _fcycles -= V_BLANK_CYCLES;
-            stat = (stat & 0xfc) | LCDMode::OAMMode;
-            _write(VideoReg::STAT, stat);
-        }
+    case CtrlReg::TAC:
+        _tac = value;
         break;
     }
 }
 
-void Cpu::timer(void)
+byte_t
+Clock::read(addr_t addr)
 {
+    switch (addr) {
+    case CtrlReg::DIV:
+        return _div;
+    case CtrlReg::TIMA:
+        return _tima;
+    case CtrlReg::TMA:
+        return _tma;
+    case CtrlReg::TAC:
+        return _tac;
+    }
+    return 0;
+}
+
+void
+Clock::tick(unsigned cycles)
+{
+    _cycles += cycles;
+    _dcycles += cycles;
+    _tcycles += cycles;
+
     if (_dcycles > 256) {
         _dcycles -= 256;
-        _write(CtrlReg::DIV, _read(CtrlReg::DIV)+1);
+        _div++;
         // Divider register triggerd
     }
-    byte_t tac = _read(CtrlReg::TAC);
-    if (tac & 0x04) {
+    if (_tac & 0x04) {
         unsigned limit = 1024;
-        switch (tac & 0x3) {
+        switch (_tac & 0x3) {
         case 0: limit = 1024; break;
         case 1: limit = 16; break;
         case 2: limit = 64; break;
         case 3: limit = 256; break;
         }
         if (_tcycles > limit) {
-            byte_t tima = _read(CtrlReg::TIMA);
             _tcycles -= limit;
-            if (tima == 0xff) {
+            if (_tima == 0xff) {
                 // Trigger the interrupt
-                _trigger(Interrupt::Timer);
+                _bus->trigger(Interrupt::Timer);
                 // Reset the overflow
-                tima = _read(CtrlReg::TMA);
+                _tima = _tma;
             } else
-                tima++;
-            _write(CtrlReg::TIMA, tima);
+                _tima++;
         }
     }
 }
+

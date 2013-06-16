@@ -266,7 +266,6 @@ TEST(DMGOpcodes, ldd_loop)
     expect.set(Register::PC, 0x0C);
     expect.set(Register::HL, 0x7fff);
     expect.set(Register::SP, 0xfffe);
-    expect.set(VideoReg::STAT, 0x11);
 
     // Run until we've zeroed out the vram
     cpu.test_step(0x2000 * 3 + 3);
@@ -421,5 +420,12 @@ TEST(MemoryTest, test)
     ram.write(0xC500, expected);
     byte_t actual = m.read(0xC500);
     EXPECT_EQ(expected, actual);
+}
+
+TEST(Bus, test)
+{
+    MemoryBus m;
+
+    //Cpu cpu(&m);
 }
 

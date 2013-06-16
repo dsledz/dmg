@@ -344,10 +344,10 @@ blit_window(SDL_Surface *screen, SDL_Surface *win, short wx, short wy)
         blit_image(win, NULL, screen, wx, wy);
 }
 
-SDLDisplay::SDLDisplay(void)
+SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0)
 {
     _vram.resize(0x2000);
-    _oam.resize(0x00A0);
+    _oam.resize(0x0100);
     _reg.resize(0x0010);
 
     reset();
@@ -377,6 +377,7 @@ SDLDisplay::reset(void)
 {
     memset(&_vram[0], 0, _vram.size());
     memset(&_oam[0], 0, _oam.size());
+    memset(&_reg[0], 0, _reg.size());
     write(VideoReg::LCDC, 0x91);
     write(VideoReg::SCY, 0x00);
     write(VideoReg::SCX, 0x00);
@@ -386,6 +387,7 @@ SDLDisplay::reset(void)
     write(VideoReg::OBP1, 0xFF);
     write(VideoReg::WY, 0x00);
     write(VideoReg::WX, 0x00);
+    _fcycles = 0;
 }
 
 bool
@@ -393,7 +395,7 @@ SDLDisplay::valid(addr_t addr)
 {
     return ((addr >= 0x8000 && addr < 0xA000) ||
             (addr >= 0xFF40 && addr <= 0xFF4B) ||
-            (addr >= 0xFE00 && addr <= 0xFEA0));
+            (addr >= 0xFE00 && addr <= 0xFEFF));
 }
 
 void
@@ -429,6 +431,55 @@ SDLDisplay::read(addr_t addr)
         return _oam[addr - 0xFE00];
     }
     return 0;
+}
+
+void
+SDLDisplay::tick(unsigned cycles)
+{
+    _fcycles += cycles;
+
+    byte_t &_stat = rget(VideoReg::STAT);
+    byte_t &_ly = rget(VideoReg::LY);
+
+    switch (_stat & 0x03) {
+    case LCDMode::HBlankMode:
+        if (_fcycles > H_BLANK_CYCLES) {
+            // Transition to VBlank or OAM
+            _fcycles -= H_BLANK_CYCLES;
+
+            _ly = (_ly + 1) % SCANLINES;
+            if (_ly == DISPLAY_LINES) {
+                // Wait until our frame is finished
+                render();
+                _bus->trigger(Interrupt::VBlank);
+                _stat = (_stat & 0xfc) | LCDMode::VBlankMode;
+            } else {
+                _stat = (_stat & 0xfc) | LCDMode::OAMMode;
+            }
+        }
+        break;
+    case LCDMode::OAMMode:
+        if (_fcycles > OAM_CYCLES) {
+            // Transition to Active
+            _fcycles -= OAM_CYCLES;
+            _stat = (_stat & 0xfc) | LCDMode::ActiveMode;
+        }
+        break;
+    case LCDMode::ActiveMode:
+        if (_fcycles > ACTIVE_CYCLES) {
+            // Transition to HBlank
+            _fcycles -= ACTIVE_CYCLES;
+            _stat = (_stat & 0xfc) | LCDMode::HBlankMode;
+        }
+        break;
+    case LCDMode::VBlankMode:
+        if (_fcycles > V_BLANK_CYCLES) {
+            // Transition to OAM
+            _fcycles -= V_BLANK_CYCLES;
+            _stat = (_stat & 0xfc) | LCDMode::OAMMode;
+        }
+        break;
+    }
 }
 
 void

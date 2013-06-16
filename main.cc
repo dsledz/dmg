@@ -44,12 +44,13 @@ class Emulator {
         ~Emulator(void) { }
 
         void run(const std::string &name) {
-            SDLDisplay display;
+            SDLDisplay display(_cpu.bus());
             SDLController control;
             SDLAudio audio;
             MBC1 rom;
             RamDevice ram;
-            SimpleMap hiram(0xFF00, 0xFFFF);
+            SimpleMap serial(0xFF01, 0xFF02);
+            SimpleMap hiram(0xFF80, 0xFFFE);
 
             std::cout << "Loading: " << name << std::endl;
             rom.load(name);
@@ -57,10 +58,11 @@ class Emulator {
             _cpu.add_mapper(&rom);
             _cpu.add_mapper(&ram);
             _cpu.add_mapper(&hiram);
-            _cpu.set_video(&display);
+            _cpu.add_mapper(&serial);
             _cpu.add_mapper(&control);
             _cpu.add_mapper(&audio);
-            _cpu.reset();
+            _cpu.set_video(&display);
+            _cpu.external_reset();
 
             while (!_stop) {
                 SDL_Event event;
@@ -75,6 +77,7 @@ class Emulator {
             _cpu.remove_mapper(&audio);
             _cpu.remove_mapper(&ram);
             _cpu.remove_mapper(&hiram);
+            _cpu.remove_mapper(&serial);
         }
 
         void OnEvent(SDLController *control, SDL_Event *event) {

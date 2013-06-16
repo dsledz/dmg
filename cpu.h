@@ -187,20 +187,6 @@ enum Oam {
     OamFlags = 3,
 };
 
-enum VideoReg {
-    LCDC = 0xFF40,
-    STAT = 0xFF41,
-    SCY  = 0xFF42,
-    SCX  = 0xFF43,
-    LY   = 0xFF44,
-    LYC  = 0xFF45,
-    BGP  = 0xFF47,
-    OBP0 = 0xFF48,
-    OBP1 = 0xFF49,
-    WY   = 0xFF4A,
-    WX   = 0xFF4B,
-};
-
 enum CtrlReg {
     KEYS = 0xFF00,
     DIV  = 0xFF04,
@@ -223,6 +209,89 @@ public:
     virtual byte_t read(addr_t addr) = 0;
 };
 
+class MemoryBus {
+public:
+    MemoryBus(void) {}
+    ~MemoryBus(void) {}
+
+    void reset(void) {
+        for_each(_maps.begin(), _maps.end(), [](Device *map){map->reset();});
+    }
+
+    void add_map(Device *map){
+        _maps.push_front(map);
+    }
+
+    void remove_map(Device *map) {
+        _maps.remove(map);
+    }
+
+    inline void trigger(Interrupt i) {
+        byte_t ifreg = read(CtrlReg::IF);
+        bit_set(ifreg, i, true);
+        write(CtrlReg::IF, ifreg);
+    };
+
+    inline void write(addr_t addr, byte_t value) {
+        switch (addr) {
+        case CtrlReg::DMG_RESET: {
+            _maps.remove(find(0));
+            break;
+        }
+        case CtrlReg::DMA: {
+            addr_t dest_addr = Mem::OAMTable;
+            auto dest = find(Mem::OAMTable);
+            addr_t src_addr = (addr_t)value << 8;
+            auto src = find(src_addr);
+            for (unsigned i = 0; i < 160; i++)
+                dest->write(dest_addr + i, src->read(src_addr + i));
+            break;
+        }
+        default:
+            find(addr)->write(addr, value);
+            break;
+        }
+    }
+
+    inline byte_t read(addr_t addr) {
+        return find(addr)->read(addr);
+    }
+
+private:
+    inline Device *find(addr_t addr) {
+        auto it = std::find_if(_maps.begin(), _maps.end(),
+            [=](Device *map) -> bool { return map->valid(addr); });
+        if (it == _maps.end())
+            throw MemException(addr);
+        return *it;
+    }
+    std::list<Device *> _maps;
+};
+
+class Clock: public Device {
+public:
+    Clock(MemoryBus *bus);
+    virtual ~Clock(void);
+
+    void tick(unsigned cycles);
+
+    virtual void reset(void);
+    virtual bool valid(addr_t addr);
+    virtual void write(addr_t addr, byte_t value);
+    virtual byte_t read(addr_t addr);
+
+private:
+    MemoryBus *_bus;
+
+    unsigned _cycles;
+    unsigned _dcycles;
+    unsigned _tcycles;
+    byte_t _div;
+    byte_t _tima;
+    byte_t _tma;
+    byte_t _tac;
+};
+
 class MBC: public Device {
 public:
     virtual ~MBC(void) { }
@@ -231,7 +300,7 @@ public:
 
 class Video: public Device {
 public:
-    virtual void render(void) = 0;
+    virtual void tick(unsigned cycles) = 0;
 };
 
 class SimpleMap: public Device {
@@ -286,67 +355,33 @@ private:
     bvec _ram;
 };
 
-class MemoryBus {
-public:
-    MemoryBus(void) {}
-    ~MemoryBus(void) {}
-
-    void reset(void) {
-        for_each(_maps.begin(), _maps.end(), [](Device *map){map->reset();});
-    }
-    void add_map(Device *map){
-        _maps.push_front(map);
-    }
-
-    void remove_map(Device *map) {
-        _maps.remove(map);
-    }
-
-    inline void write(addr_t addr, byte_t value) {
-        switch (addr) {
-        case CtrlReg::DMG_RESET: {
-            _maps.remove(find(0));
-            break;
-        }
-        case CtrlReg::DMA: {
-            addr_t dest_addr = Mem::OAMTable;
-            auto dest = find(Mem::OAMTable);
-            addr_t src_addr = (addr_t)value << 8;
-            auto src = find(src_addr);
-            for (unsigned i = 0; i < 160; i++)
-                dest->write(dest_addr + i, src->read(src_addr + i));
-            break;
-        }
-        default:
-            find(addr)->write(addr, value);
-            break;
-        }
-    }
-
-    inline byte_t read(addr_t addr) {
-        return find(addr)->read(addr);
-    }
-
-private:
-    inline Device *find(addr_t addr) {
-        auto it = std::find_if(_maps.begin(), _maps.end(),
-            [=](Device *map) -> bool { return map->valid(addr); });
-        if (it == _maps.end())
-            throw MemException(addr);
-        return *it;
-    }
-    std::list<Device *> _maps;
-};
-
-class Cpu {
+class Cpu: public Device {
 public:
     Cpu(void);
     ~Cpu(void);
     bool operator ==(const Cpu &rhs) const;
 
+    virtual void reset(void);
+    virtual bool valid(addr_t addr);
+    virtual void write(addr_t addr, byte_t value);
+    virtual byte_t read(addr_t addr);
+
     // DMG execution
-    void reset(void);
     void step(void);
+
+    // XXX: Remove?
+    void external_reset(void);
+
+    // XXX: Old?
+    inline MemoryBus *bus(void) {
+        return &_bus;
+    }
+
+    inline unsigned cycles(void) {
+        unsigned tmp = _icycles;
+        _icycles = 0;
+        return tmp;
+    };
 
     void set_video(Video *video) {
         _bus.remove_map(_video);
@@ -374,7 +409,6 @@ public:
     void set(addr_t addr, byte_t value);
     word_t get(Register reg);
     byte_t get(addr_t addr);
-    unsigned cycles(void) { return _cycles; };
 
 protected:
 
@@ -382,14 +416,6 @@ protected:
     void dispatch(void);
     void prefix_cb(void);
     void interrupt(void);
-    void video();
-    void timer();
-
-    inline void _trigger(Interrupt i) {
-        byte_t ifreg = _read(CtrlReg::IF);
-        bit_set(ifreg, i, true);
-        _write(CtrlReg::IF, ifreg);
-    };
 
     /* Addition */
     void _add(byte_t &orig, byte_t value);
@@ -446,7 +472,6 @@ protected:
     void _rst(byte_t value);
     void _jr(bool jump, sbyte_t value);
     void _jp(bool jump, word_t value);
-    void _call(word_t value);
     void _call(bool jump, word_t value);
     void _ret(bool jump);
     void _push(byte_t high, byte_t low);
@@ -463,11 +488,8 @@ protected:
     byte_t _read(addr_t addr);
 
     inline void _tick(unsigned cycles) {
+        _icycles += cycles;
         _cycles += cycles;
-        _fcycles += cycles;
-        _dcycles += cycles;
-        _tcycles += cycles;
-        _scycles += cycles;
     }
     inline void _set_hflag(word_t orig, word_t arg, word_t result) {
         _flags.H = bit_isset(orig ^ arg ^ result, 4);
@@ -571,21 +593,22 @@ private:
 
     IME _ime;
     State _state;
+    byte_t _IE;
+    byte_t _IF;
 
-    unsigned _cycles; // Total number of cycles (XXX: debugging only?)
-    unsigned _fcycles; // Current number of cycles since start of hblank
-    unsigned _dcycles; // Number of cycles since divider timer
-    unsigned _tcycles; // Number of cycles since timer tick
-    unsigned _scycles; // Number of cycles since sound handling
+    unsigned _icycles; // Cycles of last instruction(s)
+    unsigned _cycles;  // Total number of cycles (XXX: debugging only?)
 
     Video *_video;
 
     Device *_boot_rom; //XXX: unique_ptr
 
+    MemoryBus _bus;
+
+    Clock _clock;
+
     // XXX: debug
     bool _debug;
-
-    MemoryBus _bus;
 };
 
 enum LCDCBits {
