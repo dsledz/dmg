@@ -131,7 +131,7 @@ void Cpu::reset(void)
     _rH = 0x01;
     _rL = 0x4D;
     _rSP = 0xFFFE;
-    _rPC = 0x0000;
+    _rPC = 0x0100;
     _ime = IME::Disabled;
     _state = State::Running;
     _IF = 0x00;
@@ -1191,7 +1191,7 @@ bool
 Clock::valid(addr_t addr)
 {
     return ((addr == CtrlReg::TIMA) || (addr == CtrlReg::TMA) ||
-            (addr == CtrlReg::TAC));
+            (addr == CtrlReg::TAC) || (addr == CtrlReg::DIV));
 }
 
 void
