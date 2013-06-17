@@ -42,6 +42,15 @@ namespace DMG {
  */
 void read_rom(const std::string &name, bvec &rom);
 
+/*  _   _      _
+ * | | | | ___| |_ __   ___ _ __ ___
+ * | |_| |/ _ \ | '_ \ / _ \ '__/ __|
+ * |  _  |  __/ | |_) |  __/ |  \__ \
+ * |_| |_|\___|_| .__/ \___|_|  |___/
+ *              |_|
+ */
+void read_rom(const std::string &name, bvec &rom);
+
 enum class IME {
     Disabled = 0,
     Shadow = 1,

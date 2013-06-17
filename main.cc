@@ -68,7 +68,6 @@ class Emulator {
             bus.add_device(&cpu);
 
             bus.reset();
-
             while (!_stop) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event))
