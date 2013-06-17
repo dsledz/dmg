@@ -33,6 +33,12 @@
 
 namespace DMG {
 
+class MBC: public Device {
+public:
+    virtual ~MBC(void) { }
+    virtual void load(const std::string &name) = 0;
+};
+
 enum Cartridge {
     RomOnly = 0x00,
     MBC1O   = 0x01,
@@ -42,19 +48,22 @@ enum Cartridge {
 
 class MBC1: public MBC {
     public:
-        MBC1(void): _rom_bank(1) {
-            _rom.resize(0);
+        MBC1(MemoryBus *bus): _bus(bus) {
+            reset();
         }
         virtual ~MBC1(void) { }
 
         virtual void load(const std::string &name);
 
+        virtual void tick(unsigned cycles) { }
         virtual void reset(void);
         virtual bool valid(addr_t addr);
         virtual void write(addr_t addr, byte_t value);
         virtual byte_t read(addr_t addr);
 
     private:
+        MemoryBus  *_bus;
+
         std::string _name;
         Cartridge   _type;
         unsigned    _rom_bank;

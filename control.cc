@@ -27,7 +27,7 @@
 
 using namespace DMG;
 
-SDLController::SDLController(void): _keys(0xFF)
+SDLController::SDLController(MemoryBus *bus): _bus(bus), _keys(0xFF)
 {
     _key_map[key_value(GBKey::A)] =      SDLK_a;
     _key_map[key_value(GBKey::B)] =      SDLK_s;

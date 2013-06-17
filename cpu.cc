@@ -42,25 +42,17 @@ using namespace DMG;
 #define DEFAULT_ROM (32*1024)
 #define MEM_SIZE (64*1024)
 
-Cpu::Cpu(void): _rAF(0), _rBC(0), _rDE(0), _rHL(0), _rSP(0), _rPC(0),
+Cpu::Cpu(MemoryBus *bus):
+    _rAF(0), _rBC(0), _rDE(0), _rHL(0), _rSP(0), _rPC(0),
     _ime(IME::Disabled), _state(State::Running),
     _icycles(0), _cycles(0),
-    _video(NULL),
-    _boot_rom(NULL),
-    _bus(),
-    _clock(&_bus),
+    _bus(bus),
     _debug(false)
 {
-    _bus.add_map(this);
-    _bus.add_map(&_clock);
 }
 
 Cpu::~Cpu(void)
 {
-    if (_boot_rom != NULL) {
-        delete _boot_rom;
-        _boot_rom = NULL;
-    }
 }
 
 #define EQ(a, b) \
@@ -82,13 +74,6 @@ bool Cpu::operator == (const Cpu &rhs) const
     EQ(_rL, rhs._rL);
     EQ(_rSP, rhs._rSP);
     EQ(_rPC, rhs._rPC);
-#if 0
-    for (unsigned i = 0; i < _mem.size(); i++)
-        if (_read(i) != rhs._read(i)) {
-            std::cout << "Memory differences at: " << Print(i) << std::endl;
-            EQ(_read(i), rhs._read(i));
-        }
-#endif
     return true;
 }
 
@@ -1011,11 +996,10 @@ void Cpu::dispatch(void)
     }
 }
 
-void Cpu::step(void)
+void Cpu::tick(unsigned unused)
 {
     interrupt();
 
-    unsigned i = 0;
     switch (_state) {
     case State::Running:
         dispatch();
@@ -1029,11 +1013,7 @@ void Cpu::step(void)
     case State::Fault:
         break;
     }
-    i = cycles();
-
-    _clock.tick(i);
-
-    _video->tick(i);
+    _bus->set_ticks(cycles());
 }
 
 void Cpu::set(Register r, word_t arg)
@@ -1109,42 +1089,14 @@ void Cpu::_dump_reg(std::ostream &os) const
     os << std::endl;
 }
 
-byte_t Cpu::load(byte_t op)
-{
-    _write(_rPC++, op);
-    return 1;
-}
-
-byte_t Cpu::load(byte_t op, byte_t arg)
-{
-    _write(_rPC++, op);
-    _write(_rPC++, arg);
-    return 1;
-}
-
-byte_t Cpu::load(byte_t op, byte_t arg1, byte_t arg2)
-{
-    _write(_rPC++, op);
-    _write(_rPC++, arg1);
-    _write(_rPC++, arg2);
-    return 1;
-}
-
-void Cpu::test_step(unsigned steps)
-{
-    _rPC = 0xD000;
-    for (unsigned i = 0; i < steps; i++)
-        step();
-}
-
 byte_t Cpu::_read(addr_t addr)
 {
-    return _bus.read(addr);
+    return _bus->read(addr);
 }
 
 void Cpu::_write(addr_t addr, byte_t arg)
 {
-    _bus.write(addr, arg);
+    _bus->write(addr, arg);
 }
 
 /*
@@ -1155,21 +1107,6 @@ void Cpu::_write(addr_t addr, byte_t arg)
  *|_|   |_|  \___/ \__, |_|  \__,_|_| |_| |_|
  *                 |___/
  */
-void Cpu::external_reset(void)
-{
-    _bus.reset();
-
-    // Load the boot rom (if it exists)
-    try {
-        bvec boot;
-        read_rom("boot_dmg.gb", boot);
-        _boot_rom = new SimpleMap(0, boot);
-        _bus.add_map(_boot_rom);
-    } catch (RomException &e) {
-        _rPC = 0x0100;
-    }
-
-}
 
 void DMG::read_rom(const std::string &name, bvec &rom)
 {

@@ -44,43 +44,53 @@ class Emulator {
         ~Emulator(void) { }
 
         void run(const std::string &name) {
-            SDLDisplay display(_cpu.bus());
-            SDLController control;
-            SDLAudio audio;
-            MBC1 rom;
-            RamDevice ram;
-            SimpleMap serial(0xFF01, 0xFF02);
-            SimpleMap hiram(0xFF80, 0xFFFE);
+            MemoryBus bus;
+
+            Cpu cpu(&bus);
+            SDLDisplay display(&bus);
+            SDLController control(&bus);
+            SDLAudio audio(&bus);
+            MBC1 rom(&bus);
+            RamDevice ram(&bus);
+            Clock clock(&bus);
+            SimpleMap serial(&bus, 0xFF01, 0xFF02);
+            SimpleMap hiram(&bus, 0xFF80, 0xFFFE);
 
             std::cout << "Loading: " << name << std::endl;
             rom.load(name);
 
-            _cpu.add_mapper(&rom);
-            _cpu.add_mapper(&ram);
-            _cpu.add_mapper(&hiram);
-            _cpu.add_mapper(&serial);
-            _cpu.add_mapper(&control);
-            _cpu.add_mapper(&audio);
-            _cpu.set_video(&display);
-            _cpu.external_reset();
+            bus.add_device(&rom);
+            bus.add_device(&ram);
+            bus.add_device(&hiram);
+            bus.add_device(&serial);
+            bus.add_device(&control);
+            bus.add_device(&audio);
+            bus.add_device(&display);
+            bus.add_device(&clock);
+            bus.add_device(&cpu);
+
+            bus.reset();
 
             while (!_stop) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event))
-                    OnEvent(&control, &event);
+                    OnEvent(&cpu, &control, &event);
 
                 for (unsigned i = 0; i < 5000; i++)
-                    _cpu.step();
+                    bus.step();
             }
-            _cpu.set_video(NULL);
-            _cpu.remove_mapper(&control);
-            _cpu.remove_mapper(&audio);
-            _cpu.remove_mapper(&ram);
-            _cpu.remove_mapper(&hiram);
-            _cpu.remove_mapper(&serial);
+            bus.remove_device(&display);
+            bus.remove_device(&clock);
+            bus.remove_device(&control);
+            bus.remove_device(&audio);
+            bus.remove_device(&ram);
+            bus.remove_device(&rom);
+            bus.remove_device(&hiram);
+            bus.remove_device(&serial);
+            bus.remove_device(&cpu);
         }
 
-        void OnEvent(SDLController *control, SDL_Event *event) {
+        void OnEvent(Cpu *cpu, SDLController *control, SDL_Event *event) {
             switch (event->type) {
             case SDL_QUIT:
                 _stop = true;
@@ -97,10 +107,10 @@ class Emulator {
                     _stop = true;
                     break;
                 case SDLK_F2:
-                    _cpu.dump();
+                    cpu->dump();
                     break;
                 case SDLK_F1:
-                    _cpu.toggle_debug();
+                    cpu->toggle_debug();
                     break;
                 default:
                     break;
@@ -113,7 +123,6 @@ class Emulator {
         }
 
     private:
-        DMG::Cpu _cpu;
         bool _stop;
 };
 

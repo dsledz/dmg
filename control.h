@@ -57,11 +57,13 @@ static inline byte_t key_value(GBKey key) {
 
 class SDLController: public Device  {
 public:
-    SDLController(void);
+    SDLController(MemoryBus *bus);
     virtual ~SDLController(void);
 
     void handle_key(const SDL_Event *event);
 
+    virtual void tick(unsigned signal) {
+    }
     virtual void reset() {
         _value = 0x00;
     }
@@ -84,6 +86,7 @@ public:
     }
 
 private:
+    MemoryBus *_bus;
 
     SDLKey _key_map[8];
     byte_t _keys;

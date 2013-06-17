@@ -108,9 +108,10 @@ struct Channel {
 
 class SDLAudio: public Device {
     public:
-        SDLAudio(void);
+        SDLAudio(MemoryBus *bus);
         ~SDLAudio(void);
 
+        virtual void tick(unsigned cycles) { }
         virtual void reset(void);
 
         virtual bool valid(addr_t addr) {
@@ -124,11 +125,8 @@ class SDLAudio: public Device {
         }
 
         void mix(Uint8 *stream, int len);
-    private:
 
-        inline byte_t & rget(enum SoundReg reg) {
-            return _mem[static_cast<addr_t>(reg - SoundReg::NR10)];
-        }
+    private:
         inline byte_t & rget(addr_t addr) {
             return _mem[addr - SoundReg::NR10];
         }
@@ -139,6 +137,8 @@ class SDLAudio: public Device {
         sbyte_t sample_sound(Channel &channel);
 
         void sound4(bvec &data, int len);
+
+        MemoryBus *_bus;
 
         Channel _Snd1;
         Channel _Snd2;

@@ -42,7 +42,7 @@ struct AudioLock {
     ~AudioLock() { SDL_UnlockAudio(); };
 };
 
-SDLAudio::SDLAudio(void)
+SDLAudio::SDLAudio(MemoryBus *bus): _bus(bus)
 {
     _mem.resize(SoundReg::NRLast + 1 - SoundReg::NR10);
     SDL_AudioSpec fmt = { };

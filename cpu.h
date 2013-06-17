@@ -203,6 +203,7 @@ enum CtrlReg {
 class Device {
 public:
     virtual ~Device(void) { };
+    virtual void tick(unsigned cycles) = 0;
     virtual void reset(void) = 0;
     virtual bool valid(addr_t addr) = 0;
     virtual void write(addr_t addr, byte_t value) = 0;
@@ -218,12 +219,17 @@ public:
         for_each(_maps.begin(), _maps.end(), [](Device *map){map->reset();});
     }
 
-    void add_map(Device *map){
+    void add_device(Device *map){
         _maps.push_front(map);
     }
 
-    void remove_map(Device *map) {
+    void remove_device(Device *map) {
         _maps.remove(map);
+    }
+
+    void step(void) {
+        for_each(_maps.begin(), _maps.end(),
+            [&](Device *map){map->tick(_cycles);});
     }
 
     inline void trigger(Interrupt i) {
@@ -231,6 +237,10 @@ public:
         bit_set(ifreg, i, true);
         write(CtrlReg::IF, ifreg);
     };
+
+    inline void set_ticks(unsigned cycles) {
+        _cycles = cycles;
+    }
 
     inline void write(addr_t addr, byte_t value) {
         switch (addr) {
@@ -258,6 +268,9 @@ public:
     }
 
 private:
+
+    unsigned _cycles;
+
     inline Device *find(addr_t addr) {
         auto it = std::find_if(_maps.begin(), _maps.end(),
             [=](Device *map) -> bool { return map->valid(addr); });
@@ -265,6 +278,7 @@ private:
             throw MemException(addr);
         return *it;
     }
+
     std::list<Device *> _maps;
 };
 
@@ -273,8 +287,7 @@ public:
     Clock(MemoryBus *bus);
     virtual ~Clock(void);
 
-    void tick(unsigned cycles);
-
+    virtual void tick(unsigned cycles);
     virtual void reset(void);
     virtual bool valid(addr_t addr);
     virtual void write(addr_t addr, byte_t value);
@@ -292,27 +305,23 @@ private:
     byte_t _tac;
 };
 
-class MBC: public Device {
-public:
-    virtual ~MBC(void) { }
-    virtual void load(const std::string &name) = 0;
-};
-
 class Video: public Device {
 public:
-    virtual void tick(unsigned cycles) = 0;
 };
 
 class SimpleMap: public Device {
 public:
     ~SimpleMap(void) {};
-    SimpleMap(addr_t start, addr_t end): _start(start), _end(end) {
+    SimpleMap(MemoryBus *bus, addr_t start, addr_t end):
+        _bus(bus), _start(start), _end(end) {
         _ram.resize(end + 1 - start);
     }
-    SimpleMap(addr_t start, bvec &initial): _start(start) {
+    SimpleMap(MemoryBus *bus, addr_t start, bvec &initial):
+        _bus(bus), _start(start) {
         _ram = initial;
         _end = _start + _ram.size();
     }
+    virtual void tick(unsigned cycles) { }
     virtual void reset(void) {
         memset(&_ram[0], 0, _ram.size());
     }
@@ -326,6 +335,8 @@ public:
         return _ram[addr - _start];
     }
 private:
+    MemoryBus *_bus;
+
     addr_t _start;
     addr_t _end;
     bvec _ram;
@@ -333,10 +344,11 @@ private:
 
 class RamDevice: public Device {
 public:
-    ~RamDevice(void) {};
-    RamDevice(void) {
+    ~RamDevice(void) { }
+    RamDevice(MemoryBus *bus): _bus(bus) {
         _ram.resize(0x4000);
     }
+    virtual void tick(unsigned cycles) { }
     virtual void reset(void) {
         memset(&_ram[0], 0, _ram.size());
     }
@@ -352,30 +364,23 @@ public:
         return _ram[addr - 0xC000];
     }
 private:
+    MemoryBus *_bus;
+
     bvec _ram;
 };
 
 class Cpu: public Device {
 public:
-    Cpu(void);
+    Cpu(MemoryBus *bus);
     ~Cpu(void);
     bool operator ==(const Cpu &rhs) const;
 
+    // XXX: Do we need to do something here?
+    virtual void tick(unsigned cycles);
     virtual void reset(void);
     virtual bool valid(addr_t addr);
     virtual void write(addr_t addr, byte_t value);
     virtual byte_t read(addr_t addr);
-
-    // DMG execution
-    void step(void);
-
-    // XXX: Remove?
-    void external_reset(void);
-
-    // XXX: Old?
-    inline MemoryBus *bus(void) {
-        return &_bus;
-    }
 
     inline unsigned cycles(void) {
         unsigned tmp = _icycles;
@@ -383,27 +388,12 @@ public:
         return tmp;
     };
 
-    void set_video(Video *video) {
-        _bus.remove_map(_video);
-        _bus.add_map(video);
-        _video = video;
-    };
-    void add_mapper(Device *map) {
-        _bus.add_map(map);
-    }
-    void remove_mapper(Device *map) {
-        _bus.remove_map(map);
-    }
-
     void toggle_debug(void) { _debug = !_debug; };
     void dump(void);
 
     // Exposed for testing only
 
     // Test functions
-    byte_t load(byte_t op);
-    byte_t load(byte_t op, byte_t arg);
-    byte_t load(byte_t op, byte_t arg1, byte_t arg2);
     void test_step(unsigned steps);
     void set(Register reg, word_t value);
     void set(addr_t addr, byte_t value);
@@ -599,13 +589,7 @@ private:
     unsigned _icycles; // Cycles of last instruction(s)
     unsigned _cycles;  // Total number of cycles (XXX: debugging only?)
 
-    Video *_video;
-
-    Device *_boot_rom; //XXX: unique_ptr
-
-    MemoryBus _bus;
-
-    Clock _clock;
+    MemoryBus *_bus;
 
     // XXX: debug
     bool _debug;

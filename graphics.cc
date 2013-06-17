@@ -350,8 +350,6 @@ SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0)
     _oam.resize(0x0100);
     _reg.resize(0x0010);
 
-    reset();
-
     _window = surface_ptr(SDL_SetVideoMode(
         292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF));
     if (_window == NULL)
