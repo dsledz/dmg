@@ -25,6 +25,13 @@ typedef char sbyte_t;
 typedef unsigned short addr_t;
 typedef unsigned short word_t;
 typedef std::vector<byte_t> bvec;
+union Word {
+    struct {
+        byte_t l;
+        byte_t h;
+    } b;
+    word_t w;
+};
 
 namespace DMG {
 
@@ -103,6 +110,7 @@ public:
     Print(word_t arg): v(arg), w(4) {}
     Print(unsigned arg): v(arg), w(4) {}
     Print(int arg): v(arg), w(2) {}
+    Print(Word arg): v(arg.w), w(2) {}
     unsigned v;
     unsigned w;
 };

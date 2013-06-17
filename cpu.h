@@ -118,11 +118,67 @@ private:
     bvec _ram;
 };
 
+struct Registers {
+    Registers(void);
+
+    void set(Register reg, word_t value);
+    word_t get(Register reg);
+
+    bool operator ==(const Registers &rhs) const;
+    union {
+        struct {
+            union {
+                struct {
+                    byte_t reserved:4;
+                    byte_t C:1;
+                    byte_t H:1;
+                    byte_t N:1;
+                    byte_t Z:1;
+                } f;
+                byte_t v;
+            } l;
+            byte_t h;
+        } b;
+        word_t w;
+    } _AF;
+    Word _BC;
+    Word _DE;
+    Word _HL;
+    Word _SP;
+    Word _PC;
+};
+
+std::ostream& operator << (std::ostream &os, const Registers& obj);
+
+/*
+ * XXX: This are defined before the class so we can access
+ * them in the inline functions.
+ */
+#define _rAF    _R._AF.w
+#define _rA     _R._AF.b.h
+#define _rF     _R._AF.b.l.v
+#define _flags  _R._AF.b.l.f
+#define _rBC   _R._BC.w
+#define _rB    _R._BC.b.h
+#define _rC    _R._BC.b.l
+#define _rDE   _R._DE.w
+#define _rD    _R._DE.b.h
+#define _rE    _R._DE.b.l
+#define _rHL   _R._HL.w
+#define _rH    _R._HL.b.h
+#define _rL    _R._HL.b.l
+#define _rSP   _R._SP.w
+#define _rSPh  _R._SP.b.h
+#define _rSPl  _R._SP.b.l
+#define _rPC   _R._PC.w
+#define _rPCh  _R._PC.b.h
+#define _rPCl  _R._PC.b.l
+
 class Cpu: public Device {
 public:
     Cpu(MemoryBus *bus);
     ~Cpu(void);
-    bool operator ==(const Cpu &rhs) const;
+    Cpu(const Cpu &cpu) = delete;
 
     // XXX: Do we need to do something here?
     virtual void tick(unsigned cycles);
@@ -141,13 +197,9 @@ public:
     void dump(void);
 
     // Exposed for testing only
-
-    // Test functions
-    void test_step(unsigned steps);
-    void set(Register reg, word_t value);
-    void set(addr_t addr, byte_t value);
-    word_t get(Register reg);
-    byte_t get(addr_t addr);
+    Registers &regs(void) {
+        return _R;
+    }
 
 protected:
 
@@ -223,8 +275,12 @@ protected:
     void _store(Register reg, byte_t value);
     word_t _fetchw(Register reg);
 
-    void _write(addr_t addr, byte_t value);
-    byte_t _read(addr_t addr);
+    inline void _write(addr_t addr, byte_t value) {
+        _bus->write(addr, value);
+    }
+    byte_t _read(addr_t addr) {
+        return _bus->read(addr);
+    }
 
     inline void _tick(unsigned cycles) {
         _icycles += cycles;
@@ -273,63 +329,8 @@ protected:
         return tmp;
     }
 
-    void _dump_reg(std::ostream &os) const;
-
 private:
-    // Exploit the endianness of the fields so we can access a single
-    // byte of 16 bit value
-    union {
-        struct {
-            union {
-                struct {
-                    byte_t reserved:4;
-                    byte_t C:1;
-                    byte_t H:1;
-                    byte_t N:1;
-                    byte_t Z:1;
-                } _flags;
-                byte_t _rF;
-            };
-            byte_t _rA;
-        };
-        word_t _rAF;
-    };
-    union {
-        struct {
-            byte_t _rC;
-            byte_t _rB;
-        };
-        word_t _rBC;
-    };
-    union {
-        struct {
-            byte_t _rE;
-            byte_t _rD;
-        };
-        word_t _rDE;
-    };
-    union {
-        struct {
-            byte_t _rL;
-            byte_t _rH;
-        };
-        word_t _rHL;
-    };
-    union {
-        struct {
-            byte_t _rSPl;
-            byte_t _rSPh;
-        };
-        word_t _rSP;
-    };
-    union {
-        struct {
-            byte_t _rPCl;
-            byte_t _rPCh;
-        };
-        word_t _rPC;
-    };
-
+    Registers _R;
     IME _ime;
     State _state;
     byte_t _IE;

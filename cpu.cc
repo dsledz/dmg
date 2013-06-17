@@ -37,11 +37,81 @@
 
 using namespace DMG;
 
-#define DEFAULT_ROM (32*1024)
-#define MEM_SIZE (64*1024)
+Registers::Registers(void): _AF({}), _BC({}), _DE({}), _HL({}), _SP({}), _PC({})
+{
+}
+
+#define EQ(a, b) \
+    if (a.w != b.w) { \
+        std::cout << std::hex << "Mismatch '" #a "' Expected: " << Print(a.w) \
+                  << " Actual: " << Print(b.w) << std::endl; \
+        return false; \
+    }
+
+bool Registers::operator == (const Registers &rhs) const
+{
+    EQ(_AF, rhs._AF);
+    EQ(_BC, rhs._BC);
+    EQ(_DE, rhs._DE);
+    EQ(_HL, rhs._HL);
+    EQ(_SP, rhs._SP);
+    EQ(_PC, rhs._PC);
+    return true;
+}
+
+void Registers::set(Register r, word_t arg)
+{
+    switch (r) {
+    case Register::A: _AF.b.h = arg; break;
+    case Register::F: _AF.b.l.v = arg; break;
+    case Register::B: _BC.b.h = arg; break;
+    case Register::C: _BC.b.l = arg; break;
+    case Register::D: _DE.b.h = arg; break;
+    case Register::E: _DE.b.l = arg; break;
+    case Register::H: _HL.b.h = arg; break;
+    case Register::L: _HL.b.l = arg; break;
+    case Register::SP: _SP.w = arg; break;
+    case Register::PC: _PC.w = arg; break;
+    case Register::AF: _AF.w = arg; break;
+    case Register::BC: _BC.w = arg; break;
+    case Register::DE: _DE.w = arg; break;
+    case Register::HL: _HL.w = arg; break;
+    }
+}
+
+word_t Registers::get(Register r)
+{
+    switch (r) {
+    case Register::A: return _AF.b.h; break;
+    case Register::F: return _AF.b.l.v; break;
+    case Register::B: return _BC.b.h; break;
+    case Register::C: return _BC.b.l; break;
+    case Register::D: return _DE.b.h; break;
+    case Register::E: return _DE.b.l; break;
+    case Register::H: return _HL.b.h; break;
+    case Register::L: return _HL.b.l; break;
+    case Register::SP: return _SP.w; break;
+    case Register::PC: return _PC.w; break;
+    case Register::AF: return _AF.w; break;
+    case Register::BC: return _BC.w; break;
+    case Register::DE: return _DE.w; break;
+    case Register::HL: return _HL.w; break;
+    }
+}
+
+std::ostream& DMG::operator << (std::ostream &os, const Registers& obj)
+{
+    os << "AF: " << Print(obj._AF.w)
+       << " BC: " << Print(obj._BC)
+       << " DE: " << Print(obj._DE)
+       << " HL: " << Print(obj._HL)
+       << " PC: " << Print(obj._PC)
+       << " SP: " << Print(obj._SP) << std::endl;
+    return os;
+}
 
 Cpu::Cpu(MemoryBus *bus):
-    _rAF(0), _rBC(0), _rDE(0), _rHL(0), _rSP(0), _rPC(0),
+    _R(),
     _ime(IME::Disabled), _state(State::Running),
     _icycles(0), _cycles(0),
     _bus(bus),
@@ -51,28 +121,6 @@ Cpu::Cpu(MemoryBus *bus):
 
 Cpu::~Cpu(void)
 {
-}
-
-#define EQ(a, b) \
-    if (a != b) { \
-        std::cout << std::hex << "Mismatch '" #a "' Expected: " << Print(a) \
-                  << " Actual: " << Print(b) << std::endl; \
-        return false; \
-    }
-
-bool Cpu::operator == (const Cpu &rhs) const
-{
-    EQ(_rA, rhs._rA);
-    EQ(_rF, rhs._rF);
-    EQ(_rB, rhs._rB);
-    EQ(_rC, rhs._rC);
-    EQ(_rD, rhs._rD);
-    EQ(_rE, rhs._rE);
-    EQ(_rH, rhs._rH);
-    EQ(_rL, rhs._rL);
-    EQ(_rSP, rhs._rSP);
-    EQ(_rPC, rhs._rPC);
-    return true;
 }
 
 bool
@@ -577,14 +625,27 @@ void Cpu::_stop()
 {
     _d8();
     std::cout << "CPU stopped" << std::endl;
-    _dump_reg(std::cout);
     _state = State::Stopped;
+
+    dump();
 }
 
 void Cpu::dump(void)
 {
-
-    _dump_reg(std::cout);
+    std::cout << _R << std::endl;
+    switch (_ime) {
+    case IME::Disabled:
+        std::cout << "IME: Disabled";
+        break;
+    case IME::Shadow:
+        std::cout << "IME: Shadow";
+        break;
+    case IME::Enabled:
+        std::cout << "IME: Enabled";
+        break;
+    }
+    // XXX: state
+    std::cout << std::endl;
 }
 
 word_t Cpu::_fetchw(Register reg)
@@ -1020,98 +1081,6 @@ void Cpu::tick(unsigned unused)
     }
     _bus->set_ticks(cycles());
 }
-
-void Cpu::set(Register r, word_t arg)
-{
-    switch (r) {
-    case Register::A: _rA = arg; break;
-    case Register::F: _rF = arg; break;
-    case Register::B: _rB = arg; break;
-    case Register::C: _rC = arg; break;
-    case Register::D: _rD = arg; break;
-    case Register::E: _rE = arg; break;
-    case Register::H: _rH = arg; break;
-    case Register::L: _rL = arg; break;
-    case Register::SP: _rSP = arg; break;
-    case Register::PC: _rPC = arg; break;
-    case Register::AF: _rAF = arg; break;
-    case Register::BC: _rBC = arg; break;
-    case Register::DE: _rDE = arg; break;
-    case Register::HL: _rHL = arg; break;
-    }
-}
-
-word_t Cpu::get(Register r)
-{
-    switch (r) {
-    case Register::A: return _rA; break;
-    case Register::F: return _rF; break;
-    case Register::B: return _rB; break;
-    case Register::C: return _rC; break;
-    case Register::D: return _rD; break;
-    case Register::E: return _rE; break;
-    case Register::H: return _rH; break;
-    case Register::L: return _rL; break;
-    case Register::SP: return _rSP; break;
-    case Register::PC: return _rPC; break;
-    case Register::AF: return _rAF; break;
-    case Register::BC: return _rBC; break;
-    case Register::DE: return _rDE; break;
-    case Register::HL: return _rHL; break;
-    }
-}
-
-byte_t Cpu::get(addr_t addr)
-{
-    return _read(addr);
-}
-
-void Cpu::set(addr_t addr, byte_t arg)
-{
-    _write(addr, arg);
-}
-
-void Cpu::_dump_reg(std::ostream &os) const
-{
-    os << "A: " << Print(_rA) << " F: " << Print(_rF)
-       << " B: " << Print(_rB) << " C: " << Print(_rC)
-       << " D: " << Print(_rD) << " E: " << Print(_rE) << std::endl
-       << "HL: " << Print(_rHL)
-       << " PC: " << Print(_rPC)
-       << " SP: " << Print(_rSP) << std::endl;
-    switch (_ime) {
-    case IME::Disabled:
-        os << "IME: Disabled";
-        break;
-    case IME::Shadow:
-        os << "IME: Shadow";
-        break;
-    case IME::Enabled:
-        os << "IME: Enabled";
-        break;
-    }
-    // XXX: state
-    os << std::endl;
-}
-
-byte_t Cpu::_read(addr_t addr)
-{
-    return _bus->read(addr);
-}
-
-void Cpu::_write(addr_t addr, byte_t arg)
-{
-    _bus->write(addr, arg);
-}
-
-/*
- * ____
- *|  _ \ _ __ ___   __ _ _ __ __ _ _ __ ___
- *| |_) | '__/ _ \ / _` | '__/ _` | '_ ` _ \
- *|  __/| | | (_) | (_| | | | (_| | | | | | |
- *|_|   |_|  \___/ \__, |_|  \__,_|_| |_| |_|
- *                 |___/
- */
 
 addr_t InterruptVector[] = {
     0x40, /* Interrupt::VBlank */

@@ -99,12 +99,12 @@ class CpuTest: public ::testing::Test {
         {
             bus.add_device(&ram);
             bus.add_device(&cpu);
-            cpu.set(Register::PC, 0xD000);
+            cpu.regs().set(Register::PC, 0xD000);
         }
 
         void test_step(Cpu *cpu, unsigned steps)
         {
-            cpu->set(Register::PC, 0xD000);
+            cpu->regs().set(Register::PC, 0xD000);
             for (unsigned i = 0; i < steps; i++)
                 bus.step();
         }
@@ -112,14 +112,14 @@ class CpuTest: public ::testing::Test {
         void load(byte_t op)
         {
             bus.write(PC++, op);
-            cpu.set(Register::PC, PC);
+            cpu.regs().set(Register::PC, PC);
         }
 
         void load(byte_t op, byte_t arg)
         {
             bus.write(PC++, op);
             bus.write(PC++, arg);
-            cpu.set(Register::PC, PC);
+            cpu.regs().set(Register::PC, PC);
         }
 
         void load(byte_t op, byte_t arg1, byte_t arg2)
@@ -127,7 +127,7 @@ class CpuTest: public ::testing::Test {
             bus.write(PC++, op);
             bus.write(PC++, arg1);
             bus.write(PC++, arg2);
-            cpu.set(Register::PC, PC);
+            cpu.regs().set(Register::PC, PC);
         }
 
         MemoryBus bus;
@@ -144,101 +144,99 @@ TEST_F(CpuTest, Nop)
 {
     load(Opcode::NOP);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, IncA)
 {
     load(Opcode::INC_A);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::A, 1);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, AddAB)
 {
-    cpu.set(Register::B, 6);
+    cpu.regs().set(Register::B, 6);
     load(Opcode::ADD_A_B);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::A, 6);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, LdBB)
 {
-    cpu.set(Register::B, 8);
+    cpu.regs().set(Register::B, 8);
     load(Opcode::LD_B_B);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, IncBC)
 {
     load(Opcode::INC_BC);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::C, 1);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, Mem)
 {
-    Cpu expect = cpu;
-    EXPECT_EQ(expect, cpu);
+    Registers expect = cpu.regs();
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, LdBC_A)
 {
-    cpu.set(Register::A, 10);
-    cpu.set(Register::BC, 0xC234);
+    cpu.regs().set(Register::A, 10);
+    cpu.regs().set(Register::BC, 0xC234);
     load(Opcode::LD_BC_A);
 
-    Cpu expect = cpu;
-    expect.set(0xC234, 10);
-    expect.set(0xE234, 10);
+    Registers expect = cpu.regs();
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, AndB)
 {
-    cpu.set(Register::A, 0x1);
-    cpu.set(Register::B, 0x0);
+    cpu.regs().set(Register::A, 0x1);
+    cpu.regs().set(Register::B, 0x0);
     load(Opcode::AND_B);
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
 
     expect.set(Register::A, 0x0);
     expect.set(Register::F, 0xA0);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, LDSP_d16)
 {
     load(Opcode::LD_SP_d16, 0xfe, 0xff);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
 
     expect.set(Register::SP, 0xfffe);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, ldd)
@@ -248,23 +246,23 @@ TEST_F(CpuTest, ldd)
     load(Opcode::LDD_HL_A);
     load(Opcode::LDD_HL_A);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::HL, 0xCffc);
 
     test_step(&cpu, 4);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, sp_hl_sp)
 {
     load(Opcode::LD_HL_SP_r8, 0xfe);
-    cpu.set(Register::SP, 0xd000);
+    cpu.regs().set(Register::SP, 0xd000);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::HL, 0xcffe);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 #if 0
@@ -277,7 +275,7 @@ TEST_F(CpuTest, ldd_loop)
     load(Opcode::CB, 0xDC);
     load(Opcode::JR_NZ_R8, 0xfb);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::PC, 0x0C);
     expect.set(Register::HL, 0x7fff);
     expect.set(Register::SP, 0xfffe);
@@ -289,68 +287,66 @@ TEST_F(CpuTest, ldd_loop)
 
 TEST_F(CpuTest, add_sp)
 {
-    cpu.set(Register::SP, 0x8000);
+    cpu.regs().set(Register::SP, 0x8000);
     load(0xE8, 0xFF);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::SP, 0x7fff);
     expect.set(Register::F, 0x00);
 
     test_step(&cpu, 1);
 
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, add_sp2)
 {
-    cpu.set(Register::SP, 0xffff);
+    cpu.regs().set(Register::SP, 0xffff);
     load(0xE8, 0x01);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::SP, 0x0000);
     expect.set(Register::F, 0x30);
 
     test_step(&cpu, 1);
 
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, ld_a_de)
 {
-    cpu.set(Register::D, 0xC0);
-    cpu.set(Register::E, 0x00);
-    cpu.set(0xC000, 0xCC);
+    cpu.regs().set(Register::D, 0xC0);
+    cpu.regs().set(Register::E, 0x00);
+    ram.write(0xC000, 0xCC);
     load(Opcode::LD_A_DE);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::A, 0xCC);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, popAF)
 {
-    cpu.set(Register::BC, 0x1200);
-    cpu.set(Register::SP, 0xff90);
+    cpu.regs().set(Register::BC, 0x1200);
+    cpu.regs().set(Register::SP, 0xff90);
 
     load(Opcode::PUSH_BC);
     load(Opcode::POP_AF);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::AF, 0x1200);
-    expect.set(0xff8f, 0x12);
-    expect.set(0xff8e, 0x00);
 
     test_step(&cpu, 2);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, push)
 {
-    cpu.set(Register::PC, 0xD000);
-    cpu.set(Register::BC, 0x1301);
-    cpu.set(Register::SP, 0xff90);
+    cpu.regs().set(Register::PC, 0xD000);
+    cpu.regs().set(Register::BC, 0x1301);
+    cpu.regs().set(Register::SP, 0xff90);
 
     load(Opcode::PUSH_BC);
     load(Opcode::POP_AF);
@@ -360,46 +356,44 @@ TEST_F(CpuTest, push)
     load(Opcode::AND_D8, 0xF0);
     load(Opcode::CP_E);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::DE, 0x1300);
     expect.set(Register::F, 0xC0);
-    expect.set(0xff8f, 0x13);
-    expect.set(0xff8e, 0x00);
 
     test_step(&cpu, 7);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, daa)
 {
-    cpu.set(Register::PC, 0xD000);
-    cpu.set(Register::A, 0x64);
-    cpu.set(Register::B, 0x46);
+    cpu.regs().set(Register::PC, 0xD000);
+    cpu.regs().set(Register::A, 0x64);
+    cpu.regs().set(Register::B, 0x46);
 
     load(Opcode::ADD_A_B);
     load(Opcode::DAA);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
 
     expect.set(Register::A, 0x10);
     expect.set(Register::F, 0x10);
 
     test_step(&cpu, 2);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 TEST_F(CpuTest, cpl)
 {
-    cpu.set(Register::PC, 0xD000);
-    cpu.set(Register::A, 0xAA);
+    cpu.regs().set(Register::PC, 0xD000);
+    cpu.regs().set(Register::A, 0xAA);
     load(Opcode::CPL);
 
-    Cpu expect = cpu;
+    Registers expect = cpu.regs();
     expect.set(Register::A, 0x55);
     expect.set(Register::F, 0x60);
 
     test_step(&cpu, 1);
-    EXPECT_EQ(expect, cpu);
+    EXPECT_EQ(expect, cpu.regs());
 }
 
 #if 0
