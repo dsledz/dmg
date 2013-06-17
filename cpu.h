@@ -27,113 +27,11 @@
 #include <future>
 #include <iostream>
 #include <iomanip>
-#include <type_traits>
-#include <vector>
-#include <list>
-#include <stdexcept>
 
-#include <cassert>
-
-typedef unsigned char byte_t;
-typedef char sbyte_t;
-typedef unsigned short addr_t;
-typedef unsigned short word_t;
-typedef std::vector<byte_t> bvec;
+#include "types.h"
+#include "bus.h"
 
 namespace DMG {
-
-class Print {
-public:
-    Print(bool arg): v(arg), w(2) {}
-    Print(byte_t arg): v(arg), w(2) {}
-    Print(sbyte_t arg): v(arg), w(2) {}
-    Print(word_t arg): v(arg), w(4) {}
-    Print(unsigned arg): v(arg), w(4) {}
-    Print(int arg): v(arg), w(2) {}
-    unsigned v;
-    unsigned w;
-};
-
-static inline std::ostream& operator << (std::ostream &os,
-                                         const Print& obj)
-{
-    os << std::hex << "0x" << std::setw(obj.w) << std::setfill('0')
-        << obj.v;
-    return os;
-}
-
-template<typename T>
-static inline void bit_set(byte_t &arg, T bit, bool val)
-{
-    auto n = static_cast<typename std::underlying_type<T>::type>(bit);
-    arg &= ~(1 << n);
-    arg |= (val ? (1 << n) : 0);
-}
-
-static inline void bit_set(byte_t &arg, int n, bool val)
-{
-    arg &= ~(1 << n);
-    arg |= (val ? (1 << n) : 0);
-}
-
-static inline void bit_set(byte_t &arg, unsigned n, bool val)
-{
-    arg &= ~(1 << n);
-    arg |= (val ? (1 << n) : 0);
-}
-
-static inline bool bit_isset(word_t arg, unsigned n)
-{
-    return (arg & (1 << n));
-}
-
-static inline bool bit_isset(word_t arg, int n)
-{
-    return (arg & (1 << n));
-}
-
-template<typename T>
-static inline bool bit_isset(word_t arg, T bit)
-{
-    auto n = static_cast<typename std::underlying_type<T>::type>(bit);
-    return (arg & (1 << n));
-}
-
-/*  _____                    _   _
- * | ____|_  _____ ___ _ __ | |_(_) ___  _ __  ___
- * |  _| \ \/ / __/ _ \ '_ \| __| |/ _ \| '_ \/ __|
- * | |___ >  < (_|  __/ |_) | |_| | (_) | | | \__ \
- * |_____/_/\_\___\___| .__/ \__|_|\___/|_| |_|___/
- *                    |_|
- */
-class EmuException: public std::exception {
-public:
-    EmuException() {};
-};
-
-class CpuException: public EmuException {
-public:
-    CpuException() {};
-};
-
-class MemException: public EmuException {
-public:
-    MemException(addr_t addr): address(addr) {};
-    addr_t address;
-};
-
-class OpcodeException: public EmuException {
-public:
-    OpcodeException(byte_t op): _op(op) { };
-private:
-    byte_t _op;
-};
-
-class RomException: public EmuException {
-public:
-    RomException(const std::string &name): rom(name) {};
-    std::string rom;
-};
 
 /*  _   _      _
  * | | | | ___| |_ __   ___ _ __ ___
@@ -164,124 +62,6 @@ enum class Register {
     AF = 0x09, BC = 0x0A, DE = 0x0B, SP = 0x0C, PC = 0x0D
 };
 
-enum Interrupt {
-    VBlank = 0,
-    LCDStat = 1,
-    Timer = 2,
-    Serial = 3,
-    Joypad = 4,
-};
-
-enum Mem {
-    ObjTiles = 0x8000,
-    BGTiles  = 0x8800,
-    TileMap0 = 0x9800,
-    TileMap1 = 0x9C00,
-    OAMTable = 0xFE00,
-};
-
-enum Oam {
-    OamY = 0,
-    OamX = 1,
-    OamPattern = 2,
-    OamFlags = 3,
-};
-
-enum CtrlReg {
-    KEYS = 0xFF00,
-    DIV  = 0xFF04,
-    TIMA = 0xFF05,
-    TMA  = 0xFF06,
-    TAC  = 0xFF07,
-    IF   = 0xFF0F,
-    DMA  = 0xFF46,
-    DMG_RESET = 0xFF50,
-    IE   = 0xFFFF,
-};
-;
-
-class Device {
-public:
-    virtual ~Device(void) { };
-    virtual void tick(unsigned cycles) = 0;
-    virtual void reset(void) = 0;
-    virtual bool valid(addr_t addr) = 0;
-    virtual void write(addr_t addr, byte_t value) = 0;
-    virtual byte_t read(addr_t addr) = 0;
-};
-
-class MemoryBus {
-public:
-    MemoryBus(void) {}
-    ~MemoryBus(void) {}
-
-    void reset(void) {
-        for_each(_maps.begin(), _maps.end(), [](Device *map){map->reset();});
-    }
-
-    void add_device(Device *map){
-        _maps.push_front(map);
-    }
-
-    void remove_device(Device *map) {
-        _maps.remove(map);
-    }
-
-    void step(void) {
-        for_each(_maps.begin(), _maps.end(),
-            [&](Device *map){map->tick(_cycles);});
-    }
-
-    inline void trigger(Interrupt i) {
-        byte_t ifreg = read(CtrlReg::IF);
-        bit_set(ifreg, i, true);
-        write(CtrlReg::IF, ifreg);
-    };
-
-    inline void set_ticks(unsigned cycles) {
-        _cycles = cycles;
-    }
-
-    inline void write(addr_t addr, byte_t value) {
-        switch (addr) {
-        case CtrlReg::DMG_RESET: {
-            _maps.remove(find(0));
-            break;
-        }
-        case CtrlReg::DMA: {
-            addr_t dest_addr = Mem::OAMTable;
-            auto dest = find(Mem::OAMTable);
-            addr_t src_addr = (addr_t)value << 8;
-            auto src = find(src_addr);
-            for (unsigned i = 0; i < 160; i++)
-                dest->write(dest_addr + i, src->read(src_addr + i));
-            break;
-        }
-        default:
-            find(addr)->write(addr, value);
-            break;
-        }
-    }
-
-    inline byte_t read(addr_t addr) {
-        return find(addr)->read(addr);
-    }
-
-private:
-
-    unsigned _cycles;
-
-    inline Device *find(addr_t addr) {
-        auto it = std::find_if(_maps.begin(), _maps.end(),
-            [=](Device *map) -> bool { return map->valid(addr); });
-        if (it == _maps.end())
-            throw MemException(addr);
-        return *it;
-    }
-
-    std::list<Device *> _maps;
-};
-
 class Clock: public Device {
 public:
     Clock(MemoryBus *bus);
@@ -303,10 +83,6 @@ private:
     byte_t _tima;
     byte_t _tma;
     byte_t _tac;
-};
-
-class Video: public Device {
-public:
 };
 
 class SimpleMap: public Device {

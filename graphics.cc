@@ -491,9 +491,9 @@ SDLDisplay::render(void)
     surface_ptr screen = create_surface(SCREEN_W, SCREEN_H, false);
 
     TileMap bg_tiles(rget(VideoReg::BGP));
-    bg_tiles.init(&_vram[0x0800], false);
+    bg_tiles.init(&_vram[VMem::BGTiles], false);
     TileMap obj_tiles(rget(VideoReg::BGP));
-    obj_tiles.init(&_vram[0x0000], true);
+    obj_tiles.init(&_vram[VMem::ObjTiles], true);
 
     TileMap *tiles;
     if (bit_isset(lcdc, LCDCBits::BGTileData))
@@ -503,7 +503,7 @@ SDLDisplay::render(void)
 
     if (bit_isset(lcdc, LCDCBits::BGDisplay)) {
         const byte_t *map = bit_isset(lcdc, LCDCBits::BGTileMap) ?
-            &_vram[0x1C00] : &_vram[0x1800];
+            &_vram[VMem::TileMap1] : &_vram[VMem::TileMap0];
         surface_ptr bg(create_map(tiles, map));
         short scx = rget(VideoReg::SCX);
         short scy = rget(VideoReg::SCY);
@@ -512,7 +512,7 @@ SDLDisplay::render(void)
 
     if (bit_isset(lcdc, LCDCBits::WindowDisplay)) {
         const byte_t *map = bit_isset(lcdc, LCDCBits::WindowTileMap) ?
-            &_vram[0x1C00] : &_vram[0x1800];
+            &_vram[VMem::TileMap1] : &_vram[VMem::TileMap0];
         surface_ptr win(create_map(tiles, map));
         short wx = rget(VideoReg::WX);
         short wy = rget(VideoReg::WY);

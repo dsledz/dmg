@@ -54,7 +54,7 @@ class Emulator {
             RamDevice ram(&bus);
             Clock clock(&bus);
             SimpleMap serial(&bus, 0xFF01, 0xFF02);
-            SimpleMap hiram(&bus, 0xFF80, 0xFFFE);
+            SimpleMap hiram(&bus, 0xFF50, 0xFFFE);
 
             std::cout << "Loading: " << name << std::endl;
             rom.load(name);

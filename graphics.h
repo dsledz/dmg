@@ -69,6 +69,20 @@ enum VideoReg {
     WX   = 0xFF4B,
 };
 
+enum Oam {
+    OamY = 0,
+    OamX = 1,
+    OamPattern = 2,
+    OamFlags = 3,
+};
+
+enum VMem {
+    ObjTiles = 0x0000,
+    BGTiles  = 0x0800,
+    TileMap0 = 0x1800,
+    TileMap1 = 0x1C00,
+};
+
 class VideoException: protected EmuException {
 public:
     VideoException() {};
@@ -80,7 +94,7 @@ struct surface_deleter {
 
 typedef std::unique_ptr<SDL_Surface, surface_deleter> surface_ptr;
 
-class SDLDisplay: public DMG::Video {
+class SDLDisplay: public Device {
 public:
     SDLDisplay(MemoryBus *bus);
     ~SDLDisplay(void);
