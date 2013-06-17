@@ -27,11 +27,12 @@
  */
 #pragma once
 
-#include "cpu.h"
-#include <string>
-#include <algorithm>
+#include "types.h"
+#include "bus.h"
 
 namespace DMG {
+
+void read_rom(const std::string &name, bvec &rom);
 
 class MBC: public Device {
 public:

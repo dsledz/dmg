@@ -29,7 +29,8 @@
 
 #include "SDL/sdl.h"
 
-#include "cpu.h"
+#include "types.h"
+#include "bus.h"
 
 namespace DMG {
 
@@ -82,6 +83,42 @@ enum VMem {
     TileMap0 = 0x1800,
     TileMap1 = 0x1C00,
 };
+
+enum LCDCBits {
+    BGDisplay = 0,
+    OBJDisplay = 1,
+    OBJSize = 2,
+    BGTileMap = 3,
+    BGTileData = 4,
+    WindowDisplay = 5,
+    WindowTileMap = 6,
+    LCDEnabled = 7,
+};
+
+enum OAMFlags {
+    SpritePalette = 4,
+    SpriteFlipX = 5,
+    SpriteFlipY = 6,
+    SpritePriority = 7,
+};
+
+enum LCDMode {
+    HBlankMode  = 0,
+    VBlankMode  = 1,
+    OAMMode     = 2,
+    ActiveMode  = 3,
+};
+
+enum STATBits {
+    LYCInterrupt = 6,
+    Mode10Int    = 5,
+    Mode01Int    = 4,
+    Mode00Int    = 3,
+    Coincidence  = 2,
+    LCDModeBit1  = 1,
+    LCDModeBit0  = 0
+};
+
 
 class VideoException: protected EmuException {
 public:

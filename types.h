@@ -1,5 +1,11 @@
 #pragma once
 
+#include <string>
+#include <algorithm>
+#include <future>
+#include <iostream>
+#include <iomanip>
+#include <string>
 #include <type_traits>
 #include <vector>
 #include <list>

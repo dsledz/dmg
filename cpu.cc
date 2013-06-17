@@ -26,10 +26,8 @@
  * Gameboy CPU. Similar, to a stripped down Z80
  */
 
-#include <sys/stat.h>
 #include "cpu.h"
 #include <iostream>
-#include <fstream>
 #include <iomanip>
 #include <type_traits>
 #include <vector>
@@ -1114,20 +1112,6 @@ void Cpu::_write(addr_t addr, byte_t arg)
  *|_|   |_|  \___/ \__, |_|  \__,_|_| |_| |_|
  *                 |___/
  */
-
-void DMG::read_rom(const std::string &name, bvec &rom)
-{
-    struct stat sb;
-    if (stat(name.c_str(), &sb) == -1)
-        throw RomException(name);
-    rom.resize(sb.st_size);
-    try {
-        std::ifstream file(name, std::ios::in | std::ios::binary);
-        file.read((char *)&rom[0], rom.size());
-    } catch (std::ifstream::failure e) {
-        throw RomException(name);
-    }
-}
 
 addr_t InterruptVector[] = {
     0x40, /* Interrupt::VBlank */

@@ -30,7 +30,8 @@
 
 #include "SDL/sdl.h"
 
-#include "cpu.h"
+#include "types.h"
+#include "bus.h"
 
 namespace DMG {
 

@@ -29,7 +29,6 @@
  */
 
 #include "graphics.h"
-#include "cpu.h"
 
 using namespace DMG;
 

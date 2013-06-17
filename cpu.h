@@ -24,32 +24,10 @@
  */
 #pragma once
 
-#include <future>
-#include <iostream>
-#include <iomanip>
-
 #include "types.h"
 #include "bus.h"
 
 namespace DMG {
-
-/*  _   _      _
- * | | | | ___| |_ __   ___ _ __ ___
- * | |_| |/ _ \ | '_ \ / _ \ '__/ __|
- * |  _  |  __/ | |_) |  __/ |  \__ \
- * |_| |_|\___|_| .__/ \___|_|  |___/
- *              |_|
- */
-void read_rom(const std::string &name, bvec &rom);
-
-/*  _   _      _
- * | | | | ___| |_ __   ___ _ __ ___
- * | |_| |/ _ \ | '_ \ / _ \ '__/ __|
- * |  _  |  __/ | |_) |  __/ |  \__ \
- * |_| |_|\___|_| .__/ \___|_|  |___/
- *              |_|
- */
-void read_rom(const std::string &name, bvec &rom);
 
 enum class IME {
     Disabled = 0,
@@ -365,41 +343,6 @@ private:
 
     // XXX: debug
     bool _debug;
-};
-
-enum LCDCBits {
-    BGDisplay = 0,
-    OBJDisplay = 1,
-    OBJSize = 2,
-    BGTileMap = 3,
-    BGTileData = 4,
-    WindowDisplay = 5,
-    WindowTileMap = 6,
-    LCDEnabled = 7,
-};
-
-enum OAMFlags {
-    SpritePalette = 4,
-    SpriteFlipX = 5,
-    SpriteFlipY = 6,
-    SpritePriority = 7,
-};
-
-enum LCDMode {
-    HBlankMode  = 0,
-    VBlankMode  = 1,
-    OAMMode     = 2,
-    ActiveMode  = 3,
-};
-
-enum STATBits {
-    LYCInterrupt = 6,
-    Mode10Int    = 5,
-    Mode01Int    = 4,
-    Mode00Int    = 3,
-    Coincidence  = 2,
-    LCDModeBit1  = 1,
-    LCDModeBit0  = 0
 };
 
 };
