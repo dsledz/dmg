@@ -95,10 +95,8 @@ static inline byte_t op_value(const Opcode &obj)
 class CpuTest: public ::testing::Test {
 
     public:
-        CpuTest(void): bus(), cpu(&bus), ram(&bus),
-            hiram(&bus, 0xFF80, 0xFFFE), PC(0xD000)
+        CpuTest(void): bus(), cpu(&bus), ram(&bus), PC(0xD000)
         {
-            bus.add_device(&hiram);
             bus.add_device(&ram);
             bus.add_device(&cpu);
             cpu.set(Register::PC, 0xD000);
@@ -135,7 +133,6 @@ class CpuTest: public ::testing::Test {
         MemoryBus bus;
         Cpu       cpu;
         RamDevice ram;
-        SimpleMap hiram;
         word_t    PC;
 };
 
@@ -428,7 +425,7 @@ TEST(BitOps, set)
 TEST(MemoryTest, test)
 {
     MemoryBus m;
-    SimpleMap ram(&m, 0xC000, 0xDFFF);
+    RamDevice ram(&m);
     m.add_device(&ram);
 
     m.write(0xC500, 0x55);

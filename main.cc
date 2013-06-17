@@ -53,15 +53,13 @@ class Emulator {
             MBC1 rom(&bus);
             RamDevice ram(&bus);
             Clock clock(&bus);
-            SimpleMap serial(&bus, 0xFF01, 0xFF02);
-            SimpleMap hiram(&bus, 0xFF50, 0xFFFE);
+            SerialIO serial(&bus);
 
             std::cout << "Loading: " << name << std::endl;
             rom.load(name);
 
             bus.add_device(&rom);
             bus.add_device(&ram);
-            bus.add_device(&hiram);
             bus.add_device(&serial);
             bus.add_device(&control);
             bus.add_device(&audio);
@@ -85,7 +83,6 @@ class Emulator {
             bus.remove_device(&audio);
             bus.remove_device(&ram);
             bus.remove_device(&rom);
-            bus.remove_device(&hiram);
             bus.remove_device(&serial);
             bus.remove_device(&cpu);
         }

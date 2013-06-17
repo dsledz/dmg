@@ -33,6 +33,8 @@ enum Interrupt {
 /* XXX: Should we split this up more? */
 enum CtrlReg {
     KEYS = 0xFF00,
+    SB   = 0xFF01,
+    SC   = 0xFF02,
     DIV  = 0xFF04,
     TIMA = 0xFF05,
     TMA  = 0xFF06,

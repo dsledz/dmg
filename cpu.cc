@@ -85,7 +85,7 @@ Cpu::valid(addr_t addr)
     case CtrlReg::IE:
         return true;
     }
-    return false;
+    return (addr >= 0xFF60);
 }
 
 void
@@ -99,6 +99,9 @@ Cpu::write(addr_t addr, byte_t value)
     case CtrlReg::IE:
         _IE = value;
         break;
+    default:
+        if (addr >= 0xFF60)
+            _ram[addr & 0xFF] = value;
     }
 }
 
@@ -110,6 +113,9 @@ Cpu::read(addr_t addr)
         return _IF;
     case CtrlReg::IE:
         return _IE;
+    default:
+        if (addr >= 0xFF60)
+            return _ram[addr & 0xFF];
     }
     return 0;
 }
@@ -130,6 +136,7 @@ void Cpu::reset(void)
     _state = State::Running;
     _IF = 0x00;
     _IE = 0x00;
+    memset(_ram, 0, sizeof(_ram));
 }
 
 

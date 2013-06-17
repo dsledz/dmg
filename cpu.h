@@ -62,6 +62,25 @@ enum class Register {
     AF = 0x09, BC = 0x0A, DE = 0x0B, SP = 0x0C, PC = 0x0D
 };
 
+class SerialIO: public Device {
+public:
+    SerialIO(MemoryBus *bus): _bus(bus) { }
+    virtual ~SerialIO(void) { }
+
+    virtual void tick(unsigned cycles) { };
+    virtual void reset(void) { };
+    virtual bool valid(addr_t addr) {
+        return ((addr == CtrlReg::SB) || (addr == CtrlReg::SC));
+    }
+    virtual void write(addr_t addr, byte_t value) {
+    }
+    virtual byte_t read(addr_t addr) {
+        return 0;
+    }
+private:
+    MemoryBus *_bus;
+};
+
 class Clock: public Device {
 public:
     Clock(MemoryBus *bus);
@@ -83,39 +102,6 @@ private:
     byte_t _tima;
     byte_t _tma;
     byte_t _tac;
-};
-
-class SimpleMap: public Device {
-public:
-    ~SimpleMap(void) {};
-    SimpleMap(MemoryBus *bus, addr_t start, addr_t end):
-        _bus(bus), _start(start), _end(end) {
-        _ram.resize(end + 1 - start);
-    }
-    SimpleMap(MemoryBus *bus, addr_t start, bvec &initial):
-        _bus(bus), _start(start) {
-        _ram = initial;
-        _end = _start + _ram.size();
-    }
-    virtual void tick(unsigned cycles) { }
-    virtual void reset(void) {
-        memset(&_ram[0], 0, _ram.size());
-    }
-    virtual bool valid(addr_t addr) {
-        return (addr >= _start && addr <= _end);
-    }
-    virtual void write(addr_t addr, byte_t value) {
-        _ram[addr - _start] = value;
-    }
-    virtual byte_t read(addr_t addr) {
-        return _ram[addr - _start];
-    }
-private:
-    MemoryBus *_bus;
-
-    addr_t _start;
-    addr_t _end;
-    bvec _ram;
 };
 
 class RamDevice: public Device {
@@ -361,6 +347,7 @@ private:
     State _state;
     byte_t _IE;
     byte_t _IF;
+    byte_t _ram[256];
 
     unsigned _icycles; // Cycles of last instruction(s)
     unsigned _cycles;  // Total number of cycles (XXX: debugging only?)
