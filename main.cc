@@ -71,7 +71,7 @@ class Emulator {
             while (!_stop) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event))
-                    OnEvent(&cpu, &control, &event);
+                    OnEvent(&cpu, &control, &audio, &event);
 
                 for (unsigned i = 0; i < 5000; i++)
                     bus.step();
@@ -86,7 +86,8 @@ class Emulator {
             bus.remove_device(&cpu);
         }
 
-        void OnEvent(Cpu *cpu, SDLController *control, SDL_Event *event) {
+        void OnEvent(Cpu *cpu, SDLController *control,
+                     SDLAudio *audio, SDL_Event *event) {
             switch (event->type) {
             case SDL_QUIT:
                 _stop = true;
@@ -101,6 +102,12 @@ class Emulator {
                 switch (event->key.keysym.sym) {
                 case SDLK_q:
                     _stop = true;
+                    break;
+                case SDLK_EQUALS: /* '+' unshifted */
+                    audio->set_volume(audio->get_volume()+1);
+                    break;
+                case SDLK_MINUS:
+                    audio->set_volume(audio->get_volume()-1);
                     break;
                 case SDLK_F2:
                     cpu->dump();

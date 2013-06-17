@@ -47,7 +47,8 @@ enum SoundReg {
     NR30 = 0xFF1A,
     NR31 = 0xFF1B,
     NR32 = 0xFF1C,
-    NR33 = 0xFF1E,
+    NR33 = 0xFF1D,
+    NR34 = 0xFF1E,
     NR41 = 0xFF20,
     NR42 = 0xFF21,
     NR43 = 0xFF22,
@@ -93,17 +94,18 @@ struct Sweep {
 
 struct Channel {
     // Internal State
-    bool     on;      // Enabled/Disabled
+    bool      on;      // Enabled/Disabled
     byte_t    channel; // Channel ID
-    Envelope env;     // Envelope calculation
-    Sweep    sweep;   // Sweep calculation
-    bool     loop;
+    Envelope  env;     // Envelope calculation
+    Sweep     sweep;   // Sweep calculation
+    int       level;   // Level for sample
+    bool      loop;
     sbyte_t   signal;
-    int      freq;   // Freq (In GB Hz)
-    unsigned period; // Period (in SAMPLES)
-    unsigned pos;    // Position within the period
-    unsigned count;  // Current number of sample
-    unsigned len;    // Total number of samples
+    int       freq;   // Freq (In GB Hz)
+    unsigned  period; // Period (in SAMPLES)
+    unsigned  pos;    // Position within the period
+    unsigned  count;  // Current number of sample
+    unsigned  len;    // Total number of samples
 };
 
 class SDLAudio: public Device {
@@ -122,6 +124,18 @@ class SDLAudio: public Device {
         };
         virtual byte_t read(addr_t addr) {
             return _mem[addr - SoundReg::NR10];
+        }
+
+        void set_volume(int volume) {
+            if (volume > 10)
+                _volume = 10;
+            else if (volume < 0)
+                _volume = 0;
+            else
+                _volume = volume;
+        }
+        int get_volume(void) {
+            return _volume;
         }
 
         void mix(Uint8 *stream, int len);
@@ -146,6 +160,8 @@ class SDLAudio: public Device {
         Channel _Snd4;
 
         bvec _mem;
+
+        unsigned _volume;
 };
 
 };

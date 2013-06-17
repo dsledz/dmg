@@ -44,7 +44,9 @@ struct AudioLock {
 
 SDLAudio::SDLAudio(MemoryBus *bus): _bus(bus)
 {
-    _mem.resize(SoundReg::NRLast + 1 - SoundReg::NR10);
+    _mem.resize(0x30);
+
+    _volume = 0;
     SDL_AudioSpec fmt = { };
 
     fmt.freq = SAMPLES_PER_SEC;
@@ -89,7 +91,6 @@ SDLAudio::reset(void)
     set(SoundReg::NR51, 0xF3);
     set(SoundReg::NR52, 0xF1);
 }
-
 
 void
 SDLAudio::set(addr_t addr, byte_t arg)
@@ -141,6 +142,44 @@ SDLAudio::set(addr_t addr, byte_t arg)
             bit_set(rget(SoundReg::NR52), NR52Bits::Sound2On, 1);
         }
         break;
+    case SoundReg::NR30:
+        if (arg & 0x80) {
+            start_sound(_Snd3);
+            bit_set(rget(SoundReg::NR52), NR52Bits::Sound3On, 1);
+        }
+        break;
+    case SoundReg::NR31:
+        _Snd3.len = ((256 - arg) * SAMPLES_PER_SEC) / 256;
+        break;
+    case SoundReg::NR32:
+        _Snd3.level = (arg & 0x60) >> 5;
+        break;
+    case SoundReg::NR33:
+        _Snd3.freq = (_Snd3.freq & 0x0700) | arg;
+        break;
+    case SoundReg::NR34:
+        _Snd3.freq = (_Snd2.freq & 0xff) | ((arg & 0x07) << 8);
+        _Snd3.loop = (arg & 0x40) == 0;
+        if (arg & 0x80) {
+            start_sound(_Snd3);
+            bit_set(rget(SoundReg::NR52), NR52Bits::Sound3On, 1);
+        }
+        break;
+    case SoundReg::NR41:
+        _Snd3.len = ((64 - (arg & 0x3F)) * SAMPLES_PER_SEC) / 256;
+        break;
+    case SoundReg::NR42:
+        _Snd4.env.direction = (arg & 0x08) != 0;
+        _Snd4.env.value = (arg & 0x80) >> 4;
+        _Snd4.env.len = ((arg & 0x07) * SAMPLES_PER_SEC) / 64;
+        break;
+    case SoundReg::NR43:
+        // XXX: Polynominal
+        _Snd4.loop = (arg & 0x40) == 0;
+        if (arg & 0x80) {
+            start_sound(_Snd4);
+            bit_set(rget(SoundReg::NR52), NR52Bits::Sound4On, 1);
+        }
     };
     rget(addr) = arg;
 }
@@ -162,7 +201,8 @@ SDLAudio::mix(Uint8 *stream, int len)
         SDL_MixAudio(stream, &buf[0], buf.size(), SDL_MIX_MAXVOLUME);
     }
     if (_Snd3.on) {
-        //SDL_MixAudio(stream, &buf[0], buf.size(), SDL_MIX_MAXVOLUME);
+        generate(_Snd3, buf, len);
+        SDL_MixAudio(stream, &buf[0], buf.size(), SDL_MIX_MAXVOLUME);
     }
     if (_Snd4.on) {
         //SDL_MixAudio(stream, &buf[0], buf.size(), SDL_MIX_MAXVOLUME);
@@ -252,7 +292,7 @@ SDLAudio::generate(Channel &channel, bvec &data, int len)
     data.resize(len);
     // Handle the sweep register
     for (unsigned i = 0; i < len; i++)
-        data[i] = sample_sound(channel);
+        data[i] = (sample_sound(channel) * _volume) >> 3;
 }
 
 void
