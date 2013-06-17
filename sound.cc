@@ -59,11 +59,14 @@ SDLAudio::SDLAudio(MemoryBus *bus): _bus(bus)
     if (SDL_OpenAudio(&fmt, NULL) < 0) {
         std::cout << "Failed to open audio" << std::endl;
     }
+
     SDL_PauseAudio(0);
+    _bus->add_device(this);
 }
 
 SDLAudio::~SDLAudio(void)
 {
+    _bus->remove_device(this);
     AudioLock lock;
     SDL_PauseAudio(1);
 }

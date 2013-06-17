@@ -51,8 +51,12 @@ enum class Register {
 
 class SerialIO: public Device {
 public:
-    SerialIO(MemoryBus *bus): _bus(bus) { }
-    virtual ~SerialIO(void) { }
+    SerialIO(MemoryBus *bus): _bus(bus) {
+        _bus->add_device(this);
+    }
+    virtual ~SerialIO(void) {
+        _bus->remove_device(this);
+    }
 
     virtual void tick(unsigned cycles) { };
     virtual void reset(void) { };
@@ -93,11 +97,15 @@ private:
 
 class RamDevice: public Device {
 public:
-    ~RamDevice(void) { }
     RamDevice(MemoryBus *bus): _bus(bus) {
         _ram.resize(0x4000);
+        _bus->add_device(this);
     }
-    virtual void tick(unsigned cycles) { }
+    ~RamDevice(void) {
+        _bus->remove_device(this);
+    }
+    virtual void tick(unsigned cycles) {
+    }
     virtual void reset(void) {
         memset(&_ram[0], 0, _ram.size());
     }

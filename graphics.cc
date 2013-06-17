@@ -354,6 +354,8 @@ SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0)
     if (_window == NULL)
         throw VideoException();
 
+    _bus->add_device(this);
+
     SDL_Surface *gb = SDL_LoadBMP("gameboy.bmp");
     if (gb != NULL) {
         SDL_Rect rect = { .x = 0, .h = 0 };
@@ -367,6 +369,7 @@ SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0)
 
 SDLDisplay::~SDLDisplay(void)
 {
+    _bus->remove_device(this);
 }
 
 void

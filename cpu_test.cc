@@ -97,8 +97,6 @@ class CpuTest: public ::testing::Test {
     public:
         CpuTest(void): bus(), cpu(&bus), ram(&bus), PC(0xD000)
         {
-            bus.add_device(&ram);
-            bus.add_device(&cpu);
             cpu.regs().set(Register::PC, 0xD000);
         }
 

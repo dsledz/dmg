@@ -58,15 +58,6 @@ class Emulator {
             std::cout << "Loading: " << name << std::endl;
             rom.load(name);
 
-            bus.add_device(&rom);
-            bus.add_device(&ram);
-            bus.add_device(&serial);
-            bus.add_device(&control);
-            bus.add_device(&audio);
-            bus.add_device(&display);
-            bus.add_device(&clock);
-            bus.add_device(&cpu);
-
             bus.reset();
             while (!_stop) {
                 SDL_Event event;
@@ -76,14 +67,6 @@ class Emulator {
                 for (unsigned i = 0; i < 5000; i++)
                     bus.step();
             }
-            bus.remove_device(&display);
-            bus.remove_device(&clock);
-            bus.remove_device(&control);
-            bus.remove_device(&audio);
-            bus.remove_device(&ram);
-            bus.remove_device(&rom);
-            bus.remove_device(&serial);
-            bus.remove_device(&cpu);
         }
 
         void OnEvent(Cpu *cpu, SDLController *control,

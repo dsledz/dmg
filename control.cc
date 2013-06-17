@@ -37,11 +37,12 @@ SDLController::SDLController(MemoryBus *bus): _bus(bus), _keys(0xFF)
     _key_map[key_value(GBKey::Left)] =   SDLK_LEFT;
     _key_map[key_value(GBKey::Up)] =     SDLK_UP;
     _key_map[key_value(GBKey::Down)] =   SDLK_DOWN;
+    _bus->add_device(this);
 }
 
 SDLController::~SDLController(void)
 {
-
+    _bus->remove_device(this);
 }
 
 void

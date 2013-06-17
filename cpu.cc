@@ -117,10 +117,12 @@ Cpu::Cpu(MemoryBus *bus):
     _bus(bus),
     _debug(false)
 {
+    _bus->add_device(this);
 }
 
 Cpu::~Cpu(void)
 {
+    _bus->remove_device(this);
 }
 
 bool
@@ -1123,10 +1125,12 @@ void Cpu::interrupt(void)
 
 Clock::Clock(MemoryBus *bus): _bus(bus)
 {
+    _bus->add_device(this);
 }
 
 Clock::~Clock(void)
 {
+    _bus->remove_device(this);
 }
 
 void

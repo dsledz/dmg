@@ -50,9 +50,11 @@ enum Cartridge {
 class MBC1: public MBC {
     public:
         MBC1(MemoryBus *bus): _bus(bus) {
-            reset();
+            _bus->add_device(this);
         }
-        virtual ~MBC1(void) { }
+        virtual ~MBC1(void) {
+            _bus->remove_device(this);
+        }
 
         virtual void load(const std::string &name);
 
