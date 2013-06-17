@@ -40,63 +40,55 @@ using namespace DMG;
  */
 class Emulator {
     public:
-        Emulator(void) { }
+        Emulator(void): _bus(), _cpu(&_bus), _display(&_bus),
+            _control(&_bus), _audio(&_bus), _rom(&_bus),
+            _ram(&_bus), _clock(&_bus), _serial(&_bus),
+            _stop(false) {
+        }
         ~Emulator(void) { }
 
         void run(const std::string &name) {
-            MemoryBus bus;
-
-            Cpu cpu(&bus);
-            SDLDisplay display(&bus);
-            SDLController control(&bus);
-            SDLAudio audio(&bus);
-            MBC1 rom(&bus);
-            RamDevice ram(&bus);
-            Clock clock(&bus);
-            SerialIO serial(&bus);
-
             std::cout << "Loading: " << name << std::endl;
-            rom.load(name);
+            _rom.load(name);
 
-            bus.reset();
+            _bus.reset();
             while (!_stop) {
                 SDL_Event event;
                 while (SDL_PollEvent(&event))
-                    OnEvent(&cpu, &control, &audio, &event);
+                    OnEvent(&event);
 
                 for (unsigned i = 0; i < 5000; i++)
-                    bus.step();
+                    _bus.step();
             }
         }
 
-        void OnEvent(Cpu *cpu, SDLController *control,
-                     SDLAudio *audio, SDL_Event *event) {
+        void OnEvent(SDL_Event *event) {
             switch (event->type) {
             case SDL_QUIT:
                 _stop = true;
                 break;
             case SDL_KEYUP:
-                control->handle_key(event);
+                _control.handle_key(event);
                 break;
             case SDL_KEYDOWN: {
                 // Gameboy keys
-                control->handle_key(event);
+                _control.handle_key(event);
                 // Control keys
                 switch (event->key.keysym.sym) {
                 case SDLK_q:
                     _stop = true;
                     break;
                 case SDLK_EQUALS: /* '+' unshifted */
-                    audio->set_volume(audio->get_volume()+1);
+                    _audio.set_volume(_audio.get_volume()+1);
                     break;
                 case SDLK_MINUS:
-                    audio->set_volume(audio->get_volume()-1);
+                    _audio.set_volume(_audio.get_volume()-1);
                     break;
                 case SDLK_F2:
-                    cpu->dump();
+                    _cpu.dump();
                     break;
                 case SDLK_F1:
-                    cpu->toggle_debug();
+                    _cpu.toggle_debug();
                     break;
                 default:
                     break;
@@ -109,6 +101,17 @@ class Emulator {
         }
 
     private:
+        MemoryBus _bus;
+
+        Cpu _cpu;
+        SDLDisplay _display;
+        SDLController _control;
+        SDLAudio _audio;
+        MBC1 _rom;
+        RamDevice _ram;
+        Clock _clock;
+        SerialIO _serial;
+
         bool _stop;
 };
 
@@ -131,13 +134,13 @@ extern "C" int main(int argc, char **argv)
 {
     SDLObject sdl;
 
-    Emulator emu;
     if (argc < 2) {
         usage(argv[0]);
         return 0;
     }
 
     try {
+        Emulator emu;
         emu.run(argv[1]);
     } catch (DMG::RomException &e) {
         std::cout << "Unable to read rom: " << e.rom << std::endl;
