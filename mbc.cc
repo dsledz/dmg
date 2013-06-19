@@ -68,6 +68,7 @@ MBC1::load(const std::string &name)
     case Cartridge::MBC1O:
     case Cartridge::MBC1R:
     case Cartridge::MBC1RB:
+    case Cartridge::MBC3RRB:
         break;
     default:
         throw RomException(name);
@@ -166,7 +167,10 @@ MBC1::write(addr_t addr, byte_t value)
     } else if (addr >= 0x4000 && addr < 0x6000) {
         _ram_bank = value & 0x03;
     } else if (addr >= 0x2000 && addr < 0x4000) {
-        _rom_bank = value & 0x1f;
+        if (_type == MBC3RRB)
+            _rom_bank = value & 0x7f;
+        else
+            _rom_bank = value & 0x1f;
         if (_rom_bank == 0 || (_rom_bank * 0x4000) > _rom_size)
             _rom_bank = 1;
     } else if (addr >= 0) {

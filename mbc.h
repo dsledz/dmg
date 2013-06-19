@@ -45,6 +45,7 @@ enum Cartridge {
     MBC1O   = 0x01,
     MBC1R   = 0x02,
     MBC1RB  = 0x03,
+    MBC3RRB = 0x13
 };
 
 class MBC1: public MBC {
