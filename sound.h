@@ -61,14 +61,14 @@ enum SoundReg {
 };
 
 enum class NR51Bits {
-    S4S02 = 7,
-    S3S02 = 6,
-    S2S02 = 5,
-    S1S02 = 4,
-    S4S01 = 3,
-    S3S01 = 2,
-    S2S01 = 1,
-    S1S01 = 0,
+    S4SO2 = 7,
+    S3SO2 = 6,
+    S2SO2 = 5,
+    S1SO2 = 4,
+    S4SO1 = 3,
+    S3SO1 = 2,
+    S2SO1 = 1,
+    S1SO1 = 0,
 };
 
 enum class NR52Bits {
@@ -84,6 +84,20 @@ struct Envelope {
     int direction;
     unsigned len;
     unsigned count;
+
+    inline void shift(void) {
+        if (len > 0) {
+            count++;
+            if (count > len) {
+                count = 0;
+                value += direction;
+                if (value < 0)
+                    value = 0;
+                else if (value > 15)
+                    value = 15;
+            }
+        }
+    }
 };
 
 struct Sweep {
@@ -102,11 +116,19 @@ struct Channel {
     int       level;   // Level for sample
     bool      loop;
     sbyte_t   signal;
+    int       offset;
     int       freq;   // Freq (In GB Hz)
+    byte_t    duty;
+    unsigned  dutycount;
     unsigned  period; // Period (in SAMPLES)
+    unsigned  edge;   // edge trigger
     unsigned  pos;    // Position within the period
     unsigned  count;  // Current number of sample
     unsigned  len;    // Total number of samples
+    unsigned  value;  // polynominal value
+    bool      step;
+    float     ratio;
+    unsigned  shift;
 };
 
 class SDLAudio: public Device {
@@ -146,10 +168,22 @@ class SDLAudio: public Device {
             return _mem[addr - SoundReg::NR10];
         }
 
+        inline sbyte_t get_sample(int offset) {
+            byte_t s = _mem[0x20 + offset / 2];
+            if ((offset & 0x01) == 0)
+                s >>= 4;
+            return (s & 0xF);
+        }
+
         void set(addr_t addr, byte_t arg);
-        void generate(Channel &channel, bvec &data, int len);
-        void start_sound(Channel &channel);
-        sbyte_t sample_sound(Channel &channel);
+        void start_sound1(Channel &channel);
+        void start_sound2(Channel &channel);
+        void start_sound3(Channel &channel);
+        void start_sound4(Channel &channel);
+        sbyte_t sound1(Channel &channel);
+        sbyte_t sound2(Channel &channel);
+        sbyte_t sound3(Channel &channel);
+        sbyte_t sound4(Channel &channel);
 
         void sound4(bvec &data, int len);
 
