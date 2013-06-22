@@ -1087,7 +1087,7 @@ void Cpu::tick(unsigned unused)
 addr_t InterruptVector[] = {
     0x40, /* Interrupt::VBlank */
     0x48, /* Interrupt::LCDStat */
-    0x50, /* Interrupt::Timer */
+    0x50, /* Interrupt::Timeout */
     0x58, /* Interrupt::Serial */
     0x60, /* Interrupt::Joypad */
 };
@@ -1119,101 +1119,6 @@ void Cpu::interrupt(void)
             _ime = IME::Disabled;
             _state = State::Running;
             return;
-        }
-    }
-}
-
-Clock::Clock(MemoryBus *bus): _bus(bus)
-{
-    _bus->add_device(this);
-}
-
-Clock::~Clock(void)
-{
-    _bus->remove_device(this);
-}
-
-void
-Clock::reset(void)
-{
-    _cycles = 0;
-    _dcycles = 0;
-    _tcycles = 0;
-    _tima = 0;
-    _tma = 0;
-    _tac = 0;
-}
-
-bool
-Clock::valid(addr_t addr)
-{
-    return ((addr == CtrlReg::TIMA) || (addr == CtrlReg::TMA) ||
-            (addr == CtrlReg::TAC) || (addr == CtrlReg::DIV));
-}
-
-void
-Clock::write(addr_t addr, byte_t value)
-{
-    switch (addr) {
-    case CtrlReg::DIV:
-        _div = value;
-        break;
-    case CtrlReg::TIMA:
-        _tima = value;
-        break;
-    case CtrlReg::TMA:
-        _tma = value;
-        break;
-    case CtrlReg::TAC:
-        _tac = value;
-        break;
-    }
-}
-
-byte_t
-Clock::read(addr_t addr)
-{
-    switch (addr) {
-    case CtrlReg::DIV:
-        return _div;
-    case CtrlReg::TIMA:
-        return _tima;
-    case CtrlReg::TMA:
-        return _tma;
-    case CtrlReg::TAC:
-        return _tac;
-    }
-    return 0;
-}
-
-void
-Clock::tick(unsigned cycles)
-{
-    _cycles += cycles;
-    _dcycles += cycles;
-    _tcycles += cycles;
-
-    if (_dcycles > 256) {
-        _dcycles -= 256;
-        _div++;
-        // Divider register triggered
-    }
-    if (_tac & 0x04) {
-        unsigned limit = 1024;
-        switch (_tac & 0x3) {
-        case 0: limit = 1024; break;
-        case 1: limit = 16; break;
-        case 2: limit = 64; break;
-        case 3: limit = 256; break;
-        }
-        if (_tcycles > limit) {
-            _tcycles -= limit;
-            if (_tima == 0xff) {
-                _bus->irq(Interrupt::Timer);
-                // Reset the overflow
-                _tima = _tma;
-            } else
-                _tima++;
         }
     }
 }

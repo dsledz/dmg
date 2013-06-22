@@ -62,7 +62,7 @@ public:
 
     inline void irq(Interrupt i) {
         switch (i) {
-            case Interrupt::Timer:
+            case Interrupt::Timeout:
             case Interrupt::VBlank: {
                 byte_t ifreg = read(CtrlReg::IF);
                 bit_set(ifreg, i, true);
@@ -70,7 +70,7 @@ public:
                 break;
             }
             default:
- //               std::cout << "Ignoring interrupt: " << i << std::endl;
+                std::cout << "Ignoring interrupt: " << i << std::endl;
                 break;
         }
     };

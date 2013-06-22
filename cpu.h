@@ -72,29 +72,6 @@ private:
     MemoryBus *_bus;
 };
 
-class Clock: public Device {
-public:
-    Clock(MemoryBus *bus);
-    virtual ~Clock(void);
-
-    virtual void tick(unsigned cycles);
-    virtual void reset(void);
-    virtual bool valid(addr_t addr);
-    virtual void write(addr_t addr, byte_t value);
-    virtual byte_t read(addr_t addr);
-
-private:
-    MemoryBus *_bus;
-
-    unsigned _cycles;
-    unsigned _dcycles;
-    unsigned _tcycles;
-    byte_t _div;
-    byte_t _tima;
-    byte_t _tma;
-    byte_t _tac;
-};
-
 class RamDevice: public Device {
 public:
     RamDevice(MemoryBus *bus): _bus(bus) {

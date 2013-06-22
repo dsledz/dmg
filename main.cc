@@ -31,6 +31,7 @@
 #include "graphics.h"
 #include "sound.h"
 #include "control.h"
+#include "timer.h"
 #include "mbc.h"
 
 using namespace DMG;
@@ -42,7 +43,7 @@ class Emulator {
     public:
         Emulator(void): _bus(), _cpu(&_bus), _display(&_bus),
             _control(&_bus), _audio(&_bus), _rom(&_bus),
-            _ram(&_bus), _clock(&_bus), _serial(&_bus),
+            _ram(&_bus), _timer(&_bus), _serial(&_bus),
             _stop(false) {
         }
         ~Emulator(void) { }
@@ -109,7 +110,7 @@ class Emulator {
         SDLAudio _audio;
         MBC1 _rom;
         RamDevice _ram;
-        Clock _clock;
+        Timer _timer;
         SerialIO _serial;
 
         bool _stop;
