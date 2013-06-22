@@ -61,18 +61,9 @@ public:
     }
 
     inline void irq(Interrupt i) {
-        switch (i) {
-            case Interrupt::Timeout:
-            case Interrupt::VBlank: {
-                byte_t ifreg = read(CtrlReg::IF);
-                bit_set(ifreg, i, true);
-                write(CtrlReg::IF, ifreg);
-                break;
-            }
-            default:
-                std::cout << "Ignoring interrupt: " << i << std::endl;
-                break;
-        }
+        byte_t ifreg = read(CtrlReg::IF);
+        bit_set(ifreg, i, true);
+        write(CtrlReg::IF, ifreg);
     };
 
     inline void set_ticks(unsigned cycles) {
