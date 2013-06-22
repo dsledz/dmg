@@ -30,6 +30,7 @@
 
 #include "graphics.h"
 
+#include <mutex>
 using namespace DMG;
 
 enum Color {
@@ -344,7 +345,7 @@ blit_window(SDL_Surface *screen, SDL_Surface *win, short wx, short wy)
 }
 
 SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0),
-    _ticks(0), _frames(0)
+    _ticks(0), _frames(0), _future(std::async([]() { return ; }))
 {
     _vram.resize(0x2000);
     _oam.resize(0x0100);
@@ -402,6 +403,8 @@ SDLDisplay::valid(addr_t addr)
 void
 SDLDisplay::write(addr_t addr, byte_t arg)
 {
+    //std::lock_guard<std::mutex> lock(_mutex);
+
     if (addr >= 0x8000 && addr < 0xA000) {
         _vram[addr - 0x8000] = arg;
     } else if (addr >= 0xFF40 && addr <= 0xFF4B) {
@@ -424,6 +427,8 @@ SDLDisplay::write(addr_t addr, byte_t arg)
 byte_t
 SDLDisplay::read(addr_t addr)
 {
+    //std::lock_guard<std::mutex> lock(_mutex);
+
     if (addr >= 0x8000 && addr < 0xA000) {
         return _vram[addr - 0x8000];
     } else if (addr >= 0xFF40 && addr <= 0xFF4B) {
@@ -451,19 +456,15 @@ SDLDisplay::tick(unsigned cycles)
             _ly = (_ly + 1) % SCANLINES;
             if (_ly == DISPLAY_LINES) {
                 // Wait until our frame is finished
-                render();
-                _frames++;
-                unsigned end = SDL_GetTicks();
-                if (end - _ticks > 1000) {
-                    std::cout << "FPS: " << _frames << std::endl;
-                    _frames = 0;
-                    _ticks = SDL_GetTicks();
-                }
+                _future.get();
                 _bus->irq(Interrupt::VBlank);
                 _stat = (_stat & 0xfc) | LCDMode::VBlankMode;
                 if (bit_isset(_stat, STATBits::Mode01Int))
                     _bus->irq(Interrupt::LCDStat);
             } else {
+                if (_ly == 0) {
+                    _future = std::async([&](){ render(); });
+                }
                 _stat = (_stat & 0xfc) | LCDMode::OAMMode;
                 if (bit_isset(_stat, STATBits::Mode10Int))
                     _bus->irq(Interrupt::LCDStat);
@@ -506,6 +507,8 @@ SDLDisplay::tick(unsigned cycles)
 void
 SDLDisplay::render(void)
 {
+    //std::lock_guard<std::mutex> lock(_mutex);
+
     byte_t lcdc = rget(VideoReg::LCDC);
 
     if (!bit_isset(lcdc, LCDCBits::LCDEnabled))

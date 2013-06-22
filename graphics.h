@@ -160,6 +160,9 @@ private:
     unsigned _ticks;
     unsigned _frames;
     surface_ptr _window;
+
+    std::future<void> _future;
+    std::mutex _mutex;
 };
 
 };
