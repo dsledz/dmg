@@ -343,7 +343,8 @@ blit_window(SDL_Surface *screen, SDL_Surface *win, short wx, short wy)
         blit_image(win, NULL, screen, wx, wy);
 }
 
-SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0)
+SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0),
+    _ticks(0), _frames(0)
 {
     _vram.resize(0x2000);
     _oam.resize(0x0100);
@@ -451,11 +452,27 @@ SDLDisplay::tick(unsigned cycles)
             if (_ly == DISPLAY_LINES) {
                 // Wait until our frame is finished
                 render();
-                _bus->trigger(Interrupt::VBlank);
+                _frames++;
+                unsigned end = SDL_GetTicks();
+                if (end - _ticks > 1000) {
+                    std::cout << "FPS: " << _frames << std::endl;
+                    _frames = 0;
+                    _ticks = SDL_GetTicks();
+                }
+                _bus->irq(Interrupt::VBlank);
                 _stat = (_stat & 0xfc) | LCDMode::VBlankMode;
+                if (bit_isset(_stat, STATBits::Mode01Int))
+                    _bus->irq(Interrupt::LCDStat);
             } else {
                 _stat = (_stat & 0xfc) | LCDMode::OAMMode;
+                if (bit_isset(_stat, STATBits::Mode10Int))
+                    _bus->irq(Interrupt::LCDStat);
             }
+            // See if we need to trigger the lcd interrupt.
+            if (bit_isset(_stat, STATBits::LYCInterrupt) &&
+                !(bit_isset(_stat, STATBits::Coincidence) ^
+                  (rget(VideoReg::LYC) == _ly)))
+                _bus->irq(Interrupt::LCDStat);
         }
         break;
     case LCDMode::OAMMode:
@@ -470,6 +487,8 @@ SDLDisplay::tick(unsigned cycles)
             // Transition to HBlank
             _fcycles -= ACTIVE_CYCLES;
             _stat = (_stat & 0xfc) | LCDMode::HBlankMode;
+            if (bit_isset(_stat, STATBits::Mode00Int))
+                _bus->irq(Interrupt::LCDStat);
         }
         break;
     case LCDMode::VBlankMode:
@@ -477,6 +496,8 @@ SDLDisplay::tick(unsigned cycles)
             // Transition to OAM
             _fcycles -= V_BLANK_CYCLES;
             _stat = (_stat & 0xfc) | LCDMode::OAMMode;
+            if (bit_isset(_stat, STATBits::Mode10Int))
+                _bus->irq(Interrupt::LCDStat);
         }
         break;
     }

@@ -145,9 +145,7 @@ class SDLAudio: public Device {
         virtual void write(addr_t addr, byte_t value) {
             set(addr, value);
         };
-        virtual byte_t read(addr_t addr) {
-            return _mem[addr - SoundReg::NR10];
-        }
+        virtual byte_t read(addr_t addr);
 
         void set_volume(int volume) {
             if (volume > 10)

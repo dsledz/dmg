@@ -56,6 +56,6 @@ SDLController::handle_key(const SDL_Event *event)
             break;
         }
     }
-    // XXX: We need to trigger an interrupt/halt
+    _bus->irq(Interrupt::Joypad);
 }
 

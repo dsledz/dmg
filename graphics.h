@@ -157,6 +157,8 @@ private:
     bvec _reg;
     unsigned _fcycles;
 
+    unsigned _ticks;
+    unsigned _frames;
     surface_ptr _window;
 };
 

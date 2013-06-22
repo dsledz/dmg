@@ -93,6 +93,26 @@ SDLAudio::reset(void)
     set(SoundReg::NR50, 0x77);
     set(SoundReg::NR51, 0xF3);
     set(SoundReg::NR52, 0xF1);
+    _Snd1.on = false;
+    _Snd2.on = false;
+    _Snd3.on = false;
+    _Snd4.on = false;
+}
+
+byte_t
+SDLAudio::read(addr_t addr)
+{
+    AudioLock lock;
+    byte_t value = rget(addr);
+    switch (addr) {
+    case SoundReg::NR52:
+        bit_set(value, NR52Bits::Sound1On, _Snd1.on);
+        bit_set(value, NR52Bits::Sound2On, _Snd2.on);
+        bit_set(value, NR52Bits::Sound3On, _Snd3.on);
+        bit_set(value, NR52Bits::Sound4On, _Snd4.on);
+        break;
+    }
+    return value;
 }
 
 void

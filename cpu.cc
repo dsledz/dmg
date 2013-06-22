@@ -1196,7 +1196,7 @@ Clock::tick(unsigned cycles)
     if (_dcycles > 256) {
         _dcycles -= 256;
         _div++;
-        // Divider register triggerd
+        // Divider register triggered
     }
     if (_tac & 0x04) {
         unsigned limit = 1024;
@@ -1209,8 +1209,7 @@ Clock::tick(unsigned cycles)
         if (_tcycles > limit) {
             _tcycles -= limit;
             if (_tima == 0xff) {
-                // Trigger the interrupt
-                _bus->trigger(Interrupt::Timer);
+                _bus->irq(Interrupt::Timer);
                 // Reset the overflow
                 _tima = _tma;
             } else

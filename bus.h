@@ -60,10 +60,19 @@ public:
             [&](Device *map){map->tick(_cycles);});
     }
 
-    inline void trigger(Interrupt i) {
-        byte_t ifreg = read(CtrlReg::IF);
-        bit_set(ifreg, i, true);
-        write(CtrlReg::IF, ifreg);
+    inline void irq(Interrupt i) {
+        switch (i) {
+            case Interrupt::Timer:
+            case Interrupt::VBlank: {
+                byte_t ifreg = read(CtrlReg::IF);
+                bit_set(ifreg, i, true);
+                write(CtrlReg::IF, ifreg);
+                break;
+            }
+            default:
+ //               std::cout << "Ignoring interrupt: " << i << std::endl;
+                break;
+        }
     };
 
     inline void set_ticks(unsigned cycles) {
