@@ -10,6 +10,7 @@ SDL_LIBS= -L${SDL_DIR}/lib -lSDLmain -lSDL -framework OpenGL -framework Cocoa
 CHECK_SRC= cpu_test.cc
 CPU_OBJS= cpu.o mbc.o
 DMG_OBJS= main.o graphics.o control.o sound.o timer.o
+HEADERS= bus.h types.h
 
 all: ${CPU_OBJS} check dmg
 
@@ -17,25 +18,25 @@ ${GTEST_LIB}:
 	${CC} ${CPPFLAGS} -I${GTEST_DIR} -c ${GTEST_DIR}/src/gtest-all.cc
 	ar -rv ${GTEST_LIB} gtest-all.o
 
-cpu.o: cpu.cc cpu.h
+cpu.o: cpu.cc ${HEADERS}
 	${CC} ${CPPFLAGS} -c cpu.cc
 
-graphics.o: graphics.cc graphics.h cpu.h
+graphics.o: graphics.cc graphics.h ${HEADERS}
 	${CC} ${CPPFLAGS} -c graphics.cc
 
-control.o: control.cc control.h cpu.h
+control.o: control.cc control.h ${HEADERS}
 	${CC} ${CPPFLAGS} -c control.cc
 
-sound.o: sound.cc sound.h cpu.h
+sound.o: sound.cc sound.h ${HEADERS}
 	${CC} ${CPPFLAGS} -c sound.cc
 
-mbc.o: mbc.cc mbc.h cpu.h
+mbc.o: mbc.cc mbc.h ${HEADERS}
 	${CC} ${CPPFLAGS} -c mbc.cc
 
-timer.o: timer.cc timer.h cpu.h
+timer.o: timer.cc timer.h ${HEADERS}
 	${CC} ${CPPFLAGS} -c timer.cc
 
-main.o: cpu.h main.cc control.h graphics.h sound.h
+main.o: cpu.h main.cc control.h graphics.h sound.h timer.h ${HEADERS}
 	${CC} ${CPPFLAGS} -c main.cc
 
 check: ${GTEST_LIB} ${CPU_OBJS} ${CHECK_SRC}
