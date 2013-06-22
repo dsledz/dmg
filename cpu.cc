@@ -133,7 +133,7 @@ Cpu::valid(addr_t addr)
     case CtrlReg::IE:
         return true;
     }
-    return (addr >= 0xFF60);
+    return (addr >= 0xFF4C);
 }
 
 void
