@@ -38,13 +38,51 @@ public:
     virtual byte_t read(addr_t addr) = 0;
 };
 
+/**
+ * Drive all devices from a common crystal.  This code is OS X specific
+ */
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+
+class Crystal {
+    public:
+        Crystal(int hz): _hz(hz) {
+            _clock = mach_absolute_time();
+            mach_timebase_info_data_t timebase;
+            mach_timebase_info(&timebase);
+            _hz_per_nano = ((double)(_hz) * timebase.numer) /
+                (1000000000 * timebase.denom);
+        }
+        ~Crystal(void) { }
+
+        void reset(void) {
+            _clock = mach_absolute_time();
+        }
+
+        /* Return the number of ticks since last call */
+        unsigned get_ticks(void) {
+
+            uint64_t now = mach_absolute_time();
+            uint64_t delta = (now - _clock);
+
+            _clock = now;
+            return delta * _hz_per_nano;
+        }
+
+    private:
+        unsigned _hz;
+        double _hz_per_nano;
+        uint64_t _clock;
+};
+
 class MemoryBus {
 public:
-    MemoryBus(void) {}
+    MemoryBus(void): _clock(4194304) {}
     ~MemoryBus(void) {}
 
     void reset(void) {
         for_each(_devs.begin(), _devs.end(), [](Device *map){map->reset();});
+        _clock.reset();
     }
 
     void add_device(Device *map){
@@ -56,8 +94,17 @@ public:
     }
 
     void step(void) {
-        for_each(_devs.begin(), _devs.end(),
-            [&](Device *map){map->tick(_cycles);});
+        int avail;
+        while ((avail += _clock.get_ticks()) < 10000) {
+            struct timespec t = { .tv_sec = 0, .tv_nsec = 100000000 };
+            nanosleep(&t, NULL);
+        }
+        _cycles = 0;
+        while (avail > 0) {
+            for_each(_devs.begin(), _devs.end(),
+                     [&](Device *map){map->tick(_cycles);});
+            avail -= _cycles;
+        }
     }
 
     inline void irq(Interrupt i) {
@@ -97,6 +144,7 @@ public:
 
 private:
 
+    Crystal _clock;
     unsigned _cycles;
 
     inline Device *find(addr_t addr) {

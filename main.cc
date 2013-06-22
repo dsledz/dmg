@@ -49,17 +49,19 @@ class Emulator {
         ~Emulator(void) { }
 
         void run(const std::string &name) {
+            SDL_Event event;
+            while (SDL_PollEvent(&event))
+                OnEvent(&event);
+
             std::cout << "Loading: " << name << std::endl;
             _rom.load(name);
 
             _bus.reset();
             while (!_stop) {
-                SDL_Event event;
                 while (SDL_PollEvent(&event))
                     OnEvent(&event);
 
-                for (unsigned i = 0; i < 5000; i++)
-                    _bus.step();
+                _bus.step();
             }
         }
 
