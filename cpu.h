@@ -53,6 +53,8 @@ class SerialIO: public Device {
 public:
     SerialIO(MemoryBus *bus): _bus(bus) {
         _bus->add_device(this);
+        _bus->add_port(CtrlReg::SB, this);
+        _bus->add_port(CtrlReg::SC, this);
     }
     virtual ~SerialIO(void) {
         _bus->remove_device(this);
@@ -60,9 +62,6 @@ public:
 
     virtual void tick(unsigned cycles) { };
     virtual void reset(void) { };
-    virtual bool valid(addr_t addr) {
-        return ((addr == CtrlReg::SB) || (addr == CtrlReg::SC));
-    }
     virtual void write(addr_t addr, byte_t value) {
     }
     virtual byte_t read(addr_t addr) {
@@ -75,8 +74,11 @@ private:
 class RamDevice: public Device {
 public:
     RamDevice(MemoryBus *bus): _bus(bus) {
-        _ram.resize(0x4000);
+        _ram.resize(0x2000);
         _bus->add_device(this);
+        _bus->add_port(0xC000, 3, this);
+        /* XXX: Memory is mirrored */
+        /* _bus->add_port(0xE000, 3, this); */
     }
     ~RamDevice(void) {
         _bus->remove_device(this);
@@ -86,13 +88,9 @@ public:
     virtual void reset(void) {
         memset(&_ram[0], 0, _ram.size());
     }
-    virtual bool valid(addr_t addr) {
-        return (addr >= 0xC000 && addr < 0xFE00);
-    }
     virtual void write(addr_t addr, byte_t value) {
         addr -= 0xC000;
         _ram[addr] = value;
-        _ram[addr ^ 0x2000] = value;
     }
     virtual byte_t read(addr_t addr) {
         return _ram[addr - 0xC000];
@@ -168,7 +166,6 @@ public:
     // XXX: Do we need to do something here?
     virtual void tick(unsigned cycles);
     virtual void reset(void);
-    virtual bool valid(addr_t addr);
     virtual void write(addr_t addr, byte_t value);
     virtual byte_t read(addr_t addr);
 

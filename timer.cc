@@ -33,6 +33,10 @@ using namespace DMG;
 Timer::Timer(MemoryBus *bus): _bus(bus)
 {
     _bus->add_device(this);
+    _bus->add_port(CtrlReg::TIMA, this);
+    _bus->add_port(CtrlReg::TMA, this);
+    _bus->add_port(CtrlReg::TAC, this);
+    _bus->add_port(CtrlReg::DIV, this);
 }
 
 Timer::~Timer(void)
@@ -49,13 +53,6 @@ Timer::reset(void)
     _tima = 0;
     _tma = 0;
     _tac = 0;
-}
-
-bool
-Timer::valid(addr_t addr)
-{
-    return ((addr == CtrlReg::TIMA) || (addr == CtrlReg::TMA) ||
-            (addr == CtrlReg::TAC) || (addr == CtrlReg::DIV));
 }
 
 void

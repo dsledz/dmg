@@ -160,4 +160,97 @@ static inline bool bit_isset(word_t arg, T bit)
     return (arg & (1 << n));
 }
 
+template<class Val>
+class Trie {
+private:
+    struct Element {
+        Element(addr_t mask, Val *value, int depth): depth(depth),
+            mask(mask), value(value), zero(NULL), one(NULL) { }
+        ~Element(void) {
+            if (zero != NULL)
+                delete zero;
+            if (one != NULL)
+                delete one;
+        }
+
+        int      depth;
+        addr_t   mask;         /* Value of bitmask */
+        Val     *value;        /* Pointer to value */
+        Element *zero;         /* Zero */
+        Element *one;          /* One */
+    };
+
+    Element **find_ele(addr_t key, int *depth_out) {
+        Element **ele = &_head;
+        int depth = 16;
+        while (*ele != NULL && (*ele)->mask == 0) {
+            depth = (*ele)->depth - 1;
+            if (bit_isset(key, depth))
+                ele = &(*ele)->one;
+            else
+                ele = &(*ele)->zero;
+        }
+        if (depth_out != NULL)
+            *depth_out = depth;
+        return ele;
+    }
+
+public:
+    Trie(void): _head(NULL) {
+        _head = new Element(0x0000, NULL, 16);
+    }
+    ~Trie(void) {
+        if (_head != NULL)
+            delete _head;
+    }
+
+    Val *find(addr_t key) {
+        Element **ele = find_ele(key, NULL);
+        if (*ele != NULL && (*ele)->mask != 0x0000)
+            return (*ele)->value;
+        else
+            throw MemException(key);
+    }
+
+    void add(addr_t key, Val *val) {
+        int depth;
+        /* Locate the left most entry */
+        Element **ele = find_ele(key, &depth);
+        if (*ele != NULL)
+            throw MemException(key);
+        /* Fill out the trie with additional Inner leafs */
+        while (depth > 0) {
+            *ele = new Element(0x0000, NULL, depth);
+            depth--;
+            if (bit_isset(key, depth))
+                ele = &(*ele)->one;
+            else
+                ele = &(*ele)->zero;
+        }
+        *ele = new Element(0xffff, val, depth);
+    }
+
+    void add(addr_t key, int mask, Val *val) {
+        int depth;
+        /* Locate the left most entry */
+        Element **ele = find_ele(key, &depth);
+        if (*ele != NULL)
+            throw MemException(key);
+        mask = 16 - mask;
+        /* Fill out the trie with additional Inner leafs */
+        while (depth > mask) {
+            *ele = new Element(0x0000, NULL, depth);
+            depth--;
+            if (bit_isset(key, depth))
+                ele = &(*ele)->one;
+            else
+                ele = &(*ele)->zero;
+        }
+        *ele = new Element(0xffff, val, depth);
+    }
+
+private:
+    Element *_head;
+};
+
 };

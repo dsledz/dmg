@@ -33,7 +33,6 @@ public:
     virtual ~Device(void) { };
     virtual void tick(unsigned cycles) = 0;
     virtual void reset(void) = 0;
-    virtual bool valid(addr_t addr) = 0;
     virtual void write(addr_t addr, byte_t value) = 0;
     virtual byte_t read(addr_t addr) = 0;
 };
@@ -85,7 +84,15 @@ public:
         _clock.reset();
     }
 
-    void add_device(Device *map){
+    void add_port(addr_t addr, Device *map) {
+        _map.add(addr, map);
+    }
+
+    void add_port(addr_t addr, int mask, Device *map) {
+        _map.add(addr, mask, map);
+    }
+
+    void add_device(Device *map) {
         _devs.push_front(map);
     }
 
@@ -148,14 +155,12 @@ private:
     unsigned _cycles;
 
     inline Device *find(addr_t addr) {
-        auto it = std::find_if(_devs.begin(), _devs.end(),
-            [=](Device *map) -> bool { return map->valid(addr); });
-        if (it == _devs.end())
-            throw MemException(addr);
-        return *it;
+        return _map.find(addr);
     }
 
     std::list<Device *> _devs;
+
+    Trie<Device> _map;
 };
 
 };

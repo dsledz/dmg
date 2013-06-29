@@ -118,22 +118,13 @@ Cpu::Cpu(MemoryBus *bus):
     _debug(false)
 {
     _bus->add_device(this);
+    _bus->add_port(0xFF80, 9, this);
+    _bus->add_port(0xFF0F, this);
 }
 
 Cpu::~Cpu(void)
 {
     _bus->remove_device(this);
-}
-
-bool
-Cpu::valid(addr_t addr)
-{
-    switch (addr) {
-    case CtrlReg::IF:
-    case CtrlReg::IE:
-        return true;
-    }
-    return (addr >= 0xFF4C);
 }
 
 void

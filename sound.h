@@ -139,9 +139,6 @@ class SDLAudio: public Device {
         virtual void tick(unsigned cycles) { }
         virtual void reset(void);
 
-        virtual bool valid(addr_t addr) {
-            return (addr >= SoundReg::NR10 && addr <= SoundReg::NRLast);
-        };
         virtual void write(addr_t addr, byte_t value) {
             set(addr, value);
         };

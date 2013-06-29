@@ -62,6 +62,8 @@ SDLAudio::SDLAudio(MemoryBus *bus): _bus(bus)
 
     SDL_PauseAudio(0);
     _bus->add_device(this);
+    _bus->add_port(0xFF10, 12, this);
+    _bus->add_port(0xFF20, 11, this);
 }
 
 SDLAudio::~SDLAudio(void)

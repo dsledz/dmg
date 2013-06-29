@@ -139,7 +139,6 @@ public:
     virtual void tick(unsigned cycles);
 
     virtual void reset(void);
-    virtual bool valid(addr_t addr);
     virtual void write(addr_t addr, byte_t value);
     virtual byte_t read(addr_t addr);
 

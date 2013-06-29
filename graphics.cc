@@ -31,6 +31,8 @@
 #include "graphics.h"
 
 #include <mutex>
+#include <functional>
+
 using namespace DMG;
 
 enum Color {
@@ -357,6 +359,9 @@ SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0),
         throw VideoException();
 
     _bus->add_device(this);
+    _bus->add_port(0x8000, 3, this);
+    _bus->add_port(0xFE00, 8, this);
+    _bus->add_port(0xFF40, 12, this);
 
     SDL_Surface *gb = SDL_LoadBMP("gameboy.bmp");
     if (gb != NULL) {
@@ -390,14 +395,6 @@ SDLDisplay::reset(void)
     write(VideoReg::WY, 0x00);
     write(VideoReg::WX, 0x00);
     _fcycles = 0;
-}
-
-bool
-SDLDisplay::valid(addr_t addr)
-{
-    return ((addr >= 0x8000 && addr < 0xA000) ||
-            (addr >= 0xFF40 && addr <= 0xFF4B) ||
-            (addr >= 0xFE00 && addr <= 0xFEFF));
 }
 
 void

@@ -39,7 +39,7 @@ timer.o: timer.cc timer.h ${HEADERS}
 main.o: cpu.h main.cc control.h graphics.h sound.h timer.h ${HEADERS}
 	${CC} ${CPPFLAGS} -c main.cc
 
-check: ${GTEST_LIB} ${CPU_OBJS} ${CHECK_SRC}
+check: ${GTEST_LIB} ${CPU_OBJS} ${CHECK_SRC} ${HEADERS}
 	${CC} ${CPPFLAGS} -I${GTEST_DIR} -c ${GTEST_DIR}/src/gtest_main.cc
 	${CC} ${CPPFLAGS} ${GTEST_LIB} ${CHECK_SRC} ${CPU_OBJS} gtest_main.o -o check
 

@@ -52,6 +52,8 @@ class MBC1: public MBC {
     public:
         MBC1(MemoryBus *bus): _bus(bus) {
             _bus->add_device(this);
+            _bus->add_port(0x0000, 1, this);
+            _bus->add_port(0xA000, 3, this);
         }
         virtual ~MBC1(void) {
             _bus->remove_device(this);
@@ -61,7 +63,6 @@ class MBC1: public MBC {
 
         virtual void tick(unsigned cycles) { }
         virtual void reset(void);
-        virtual bool valid(addr_t addr);
         virtual void write(addr_t addr, byte_t value);
         virtual byte_t read(addr_t addr);
 

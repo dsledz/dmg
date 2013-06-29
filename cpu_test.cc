@@ -435,3 +435,32 @@ TEST(Bus, test)
     //Cpu cpu(&m);
 }
 
+TEST(TrieTest, one)
+{
+    int x8800 = 9;
+    Trie<int> t;
+
+    t.add(0x8800, &x8800);
+
+    EXPECT_EQ(t.find(0x8800), &x8800);
+
+    EXPECT_THROW(t.add(0x8800, &x8800), MemException);
+
+    EXPECT_THROW(t.find(0x8900), MemException);
+}
+
+TEST(TrieTest, prefix)
+{
+    int x8800 = 9;
+    Trie<int> t;
+
+    t.add(0x8800, 8, &x8800);
+
+    EXPECT_EQ(t.find(0x8800), &x8800);
+    EXPECT_EQ(t.find(0x8880), &x8800);
+    EXPECT_EQ(t.find(0x8801), &x8800);
+
+    EXPECT_THROW(t.add(0x8800, &x8800), MemException);
+
+    EXPECT_THROW(t.find(0x8900), MemException);
+}

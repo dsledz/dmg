@@ -67,9 +67,6 @@ public:
     virtual void reset() {
         _value = 0x00;
     }
-    virtual bool valid(addr_t addr) {
-        return (addr == CtrlReg::KEYS);
-    }
     virtual byte_t *direct(addr_t addr) {
         return NULL;
     }

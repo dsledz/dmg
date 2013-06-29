@@ -38,6 +38,7 @@ SDLController::SDLController(MemoryBus *bus): _bus(bus), _keys(0xFF)
     _key_map[key_value(GBKey::Up)] =     SDLK_UP;
     _key_map[key_value(GBKey::Down)] =   SDLK_DOWN;
     _bus->add_device(this);
+    _bus->add_port(CtrlReg::KEYS, this);
 }
 
 SDLController::~SDLController(void)

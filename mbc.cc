@@ -114,7 +114,7 @@ MBC1::load(const std::string &name)
 
     switch (_rom[0x0149]) {
     case 0:
-        _ram_size = 0;
+        _ram_size = 2 * 1024;
     case 1:
         _ram_size = 2 * 1024;
         break;
@@ -129,8 +129,6 @@ MBC1::load(const std::string &name)
         break;
     }
     _ram.resize(_ram_size);
-    _ram_low = _ram_size > 0 ? 0xA000 : 0xFFFFFF;
-    _ram_high = _ram_size > 0 ? 0xC000 : 0xFFFFFF;
 
 #if 0
     std::cout << "Cartridge Header" << std::endl;
@@ -149,18 +147,11 @@ MBC1::reset(void)
     _rom_bank = 1;
 }
 
-bool
-MBC1::valid(addr_t addr)
-{
-    return ((addr >= _rom_low && addr < _rom_high) ||
-            (addr >= _ram_low && addr < _ram_high));
-}
-
 void
 MBC1::write(addr_t addr, byte_t value)
 {
-    if (addr >= _ram_low && addr < _ram_high) {
-        addr -= _ram_low;
+    if (addr >= 0xA000 && addr < 0xC000) {
+        addr -= 0xA000;
         _ram[_ram_bank * 0x2000 + addr] = value;
     } else if (addr >= 0x6000 && addr < 0x8000) {
         // XXX: Select mode
@@ -188,8 +179,8 @@ MBC1::read(addr_t addr)
 {
     if (addr < 0x4000)
         return _rom[addr];
-    else if (addr >= _ram_low && addr < _ram_high) {
-        addr -= _ram_low;
+    else if (addr >= 0xA000 && addr < 0xC000) {
+        addr -= 0xA000;
         return _ram.at(_ram_bank * 0x2000 + addr);
     } else {
         addr -= 0x4000;
