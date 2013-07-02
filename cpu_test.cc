@@ -25,6 +25,7 @@
 
 #include "gtest/gtest.h"
 #include "cpu.h"
+#include "timer.h"
 
 using namespace DMG;
 
@@ -434,6 +435,37 @@ TEST(Bus, test)
 
     //Cpu cpu(&m);
 }
+
+TEST(Bus, saveload)
+{
+    bvec data;
+    byte_t div = 50;
+
+    {
+        MemoryBus m;
+        Timer timer(&m);
+
+        m.reset();
+        timer.write(CtrlReg::DIV, div);
+
+        SaveState save(data);
+        m.save(save);
+    }
+
+    {
+        MemoryBus m;
+        Timer timer(&m);
+
+        m.reset();
+
+        LoadState load(data);
+        m.load(load);
+
+        EXPECT_EQ(div, timer.read(CtrlReg::DIV));
+    }
+
+}
+
 
 TEST(TrieTest, one)
 {

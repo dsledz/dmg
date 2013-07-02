@@ -48,7 +48,7 @@ DMG::read_rom(const std::string &name, bvec &rom)
 }
 
 void
-MBC1::load(const std::string &name)
+MBC1::load_rom(const std::string &name)
 {
     read_rom(name, _rom);
 
@@ -109,8 +109,6 @@ MBC1::load(const std::string &name)
     }
     if (_rom_size != _rom.size())
         throw RomException(name);
-    _rom_low = 0;
-    _rom_high = std::min(_rom.size(), (unsigned long)0x8000);
 
     switch (_rom[0x0149]) {
     case 0:
@@ -137,6 +135,30 @@ MBC1::load(const std::string &name)
     std::cout << "Rom Size: " << Print(_rom_size) << std::endl;
 #endif
 
+}
+
+void
+MBC1::save(SaveState &state)
+{
+    state << _type;
+    state << _rom_bank;
+    state << _rom_size;
+    state << _rom; /*XXX: lame */
+    state << _ram_bank;
+    state << _ram_size;
+    state << _ram;
+}
+
+void
+MBC1::load(LoadState &state)
+{
+    state >> _type;
+    state >> _rom_bank;
+    state >> _rom_size;
+    state >> _rom; /*XXX: lame */
+    state >> _ram_bank;
+    state >> _ram_size;
+    state >> _ram;
 }
 
 void

@@ -45,6 +45,30 @@ Timer::~Timer(void)
 }
 
 void
+Timer::save(SaveState &state)
+{
+    state << _cycles;
+    state << _dcycles;
+    state << _tcycles;
+    state << _div;
+    state << _tima;
+    state << _tma;
+    state << _tac;
+}
+
+void
+Timer::load(LoadState &state)
+{
+    state >> _cycles;
+    state >> _dcycles;
+    state >> _tcycles;
+    state >> _div;
+    state >> _tima;
+    state >> _tma;
+    state >> _tac;
+}
+
+void
 Timer::reset(void)
 {
     _cycles = 0;

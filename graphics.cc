@@ -381,6 +381,9 @@ SDLDisplay::~SDLDisplay(void)
 void
 SDLDisplay::reset(void)
 {
+    _future.get();
+    _future = std::async([]() { return ; });
+
     memset(&_vram[0], 0, _vram.size());
     memset(&_oam[0], 0, _oam.size());
     write(VideoReg::LCDC, 0x91);
@@ -425,6 +428,29 @@ SDLDisplay::write(addr_t addr, byte_t arg)
             _oam[addr - 0xFE00] = arg;
         }
     }
+}
+
+void
+SDLDisplay::save(SaveState &state)
+{
+    state << _vram;
+    state << _oam;
+
+    state << _lcdc << _stat << _scy << _scx << _ly << _lyc
+          << _bgp << _obp0 << _obp1 << _wy << _wx;
+
+    state << _fcycles;
+}
+
+void SDLDisplay::load(LoadState &state)
+{
+    state >> _vram;
+    state >> _oam;
+
+    state >> _lcdc >> _stat >> _scy >> _scx >> _ly >> _lyc
+          >> _bgp >> _obp0 >> _obp1 >> _wy >> _wx;
+
+    state >> _fcycles;
 }
 
 byte_t
@@ -475,6 +501,7 @@ SDLDisplay::tick(unsigned cycles)
                     _bus->irq(Interrupt::LCDStat);
             } else {
                 if (_ly == 0) {
+                    render();
                     _future = std::async([&](){ render(); });
                 }
                 _stat = (_stat & 0xfc) | LCDMode::OAMMode;

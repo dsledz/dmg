@@ -34,6 +34,8 @@ public:
     Timer(MemoryBus *bus);
     virtual ~Timer(void);
 
+    virtual void save(SaveState &state);
+    virtual void load(LoadState &state);
     virtual void tick(unsigned cycles);
     virtual void reset(void);
     virtual void write(addr_t addr, byte_t value);

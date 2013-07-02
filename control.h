@@ -67,8 +67,11 @@ public:
     virtual void reset() {
         _value = 0x00;
     }
-    virtual byte_t *direct(addr_t addr) {
-        return NULL;
+    virtual void save(SaveState &state) {
+        state << _value;
+    }
+    virtual void load(LoadState &state) {
+        state >> _value;
     }
     virtual void write(addr_t addr, byte_t arg) {
         // XXX: We need to OR the keys if both are set.

@@ -54,11 +54,11 @@ class Emulator {
                 OnEvent(&event);
 
             std::cout << "Loading: " << name << std::endl;
-            _rom.load(name);
+            _rom.load_rom(name);
 
             _bus.reset();
             while (!_stop) {
-                while (SDL_PollEvent(&event))
+                while (SDL_PollEvent(&event) != 0)
                     OnEvent(&event);
 
                 _bus.step();
@@ -93,6 +93,16 @@ class Emulator {
                 case SDLK_F1:
                     _cpu.toggle_debug();
                     break;
+                case SDLK_F5: {
+                    SaveState state(_state_data);
+                    _bus.save(state);
+                    break;
+                }
+                case SDLK_F9: {
+                    LoadState state(_state_data);
+                    _bus.load(state);
+                    break;
+                }
                 default:
                     break;
                 }
@@ -106,6 +116,7 @@ class Emulator {
     private:
         MemoryBus _bus;
 
+        bvec _state_data;
         Cpu _cpu;
         SDLDisplay _display;
         SDLController _control;

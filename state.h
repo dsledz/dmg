@@ -22,63 +22,73 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-/*
- * Memory bank Controller
+/**
+ * Serialization library
  */
 #pragma once
 
 #include "types.h"
-#include "bus.h"
 
 namespace DMG {
 
-void read_rom(const std::string &name, bvec &rom);
-
-class MBC: public Device {
+class SaveState {
 public:
-    virtual ~MBC(void) { }
-    virtual void load_rom(const std::string &name) = 0;
+    SaveState(bvec &data): data(data), pos(0) {
+        data.resize(0);
+    }
+
+    ~SaveState(void) { }
+
+    bvec &data;
+    unsigned pos;
 };
 
-enum Cartridge {
-    RomOnly = 0x00,
-    MBC1O   = 0x01,
-    MBC1R   = 0x02,
-    MBC1RB  = 0x03,
-    MBC3RRB = 0x13
+class LoadState {
+public:
+    LoadState(const bvec &data): data(data), pos(0) { }
+
+    const bvec &data;
+    unsigned pos;
 };
 
-class MBC1: public MBC {
-    public:
-        MBC1(MemoryBus *bus): _bus(bus) {
-            _bus->add_device(this);
-            _bus->add_port(0x0000, 1, this);
-            _bus->add_port(0xA000, 3, this);
-        }
-        virtual ~MBC1(void) {
-            _bus->remove_device(this);
-        }
+template<typename T> static inline
+SaveState & operator << (SaveState & state, const T & d)
+{
+    state.data.resize(state.pos + sizeof(d));
+    memcpy(&state.data[state.pos], &d, sizeof(d));
+    state.pos += sizeof(d);
+    return state;
+}
 
-        virtual void load_rom(const std::string &name);
+static inline
+SaveState & operator <<(SaveState &state, const bvec & d)
+{
+    unsigned size = d.size();
+    state << size;
+    state.data.resize(state.pos + d.size());
+    memcpy(&state.data[state.pos], d.data(), d.size());
+    state.pos += d.size();
+    return state;
+}
 
-        virtual void save(SaveState &state);
-        virtual void load(LoadState &state);
-        virtual void tick(unsigned cycles) { }
-        virtual void reset(void);
-        virtual void write(addr_t addr, byte_t value);
-        virtual byte_t read(addr_t addr);
+template<typename T> static inline
+LoadState & operator >>(LoadState & state, T & d)
+{
+    memcpy(&d, &state.data[state.pos], sizeof(d));
+    state.pos += sizeof(d);
+    return state;
+}
 
-    private:
-        MemoryBus  *_bus;
+static inline
+LoadState & operator >>(LoadState & state, bvec & d)
+{
+    unsigned size;
+    state >> size;
+    d.resize(size);
+    memcpy(d.data(), &state.data[state.pos], size);
+    state.pos += size;
+    return state;
+}
 
-        std::string _name;
-        Cartridge   _type;
-        unsigned    _rom_bank;
-        unsigned    _rom_size;
-        bvec        _rom;
-        unsigned    _ram_bank;
-        unsigned    _ram_size;
-        bvec        _ram;
-};
 
 };

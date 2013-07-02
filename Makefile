@@ -3,13 +3,14 @@
 CC= clang++
 GTEST_DIR= gtest-1.6.0
 SDL_DIR= ../SDL
-CPPFLAGS=  -I${GTEST_DIR}/include -g -Wall -Werror -std=c++11 -stdlib=libc++ -DGTEST_USE_OWN_TR1_TUPLE=1 -I${SDL_DIR}/include ${CFLAGS} ${FLAGS}
+DEBUG_FLAGS= -g
+CPPFLAGS=  -I${GTEST_DIR}/include -Wall -Werror -std=c++11 -stdlib=libc++ -DGTEST_USE_OWN_TR1_TUPLE=1 -I${SDL_DIR}/include ${CFLAGS} ${FLAGS} ${DEBUG_FLAGS}
 GTEST_LIB= libgtest.a
 SDL_LIBS= -L${SDL_DIR}/lib -lSDLmain -lSDL -framework OpenGL -framework Cocoa
 
 CHECK_SRC= cpu_test.cc
-CPU_OBJS= cpu.o mbc.o
-DMG_OBJS= main.o graphics.o control.o sound.o timer.o
+CPU_OBJS= cpu.o mbc.o timer.o
+DMG_OBJS= main.o graphics.o control.o sound.o
 HEADERS= bus.h types.h
 
 all: ${CPU_OBJS} check dmg

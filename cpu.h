@@ -60,6 +60,8 @@ public:
         _bus->remove_device(this);
     }
 
+    virtual void save(SaveState &state) { };
+    virtual void load(LoadState &state) { };
     virtual void tick(unsigned cycles) { };
     virtual void reset(void) { };
     virtual void write(addr_t addr, byte_t value) {
@@ -78,7 +80,7 @@ public:
         _bus->add_device(this);
         _bus->add_port(0xC000, 3, this);
         /* XXX: Memory is mirrored */
-        /* _bus->add_port(0xE000, 3, this); */
+        _bus->add_port(0xE000, 4, this);
     }
     ~RamDevice(void) {
         _bus->remove_device(this);
@@ -88,12 +90,19 @@ public:
     virtual void reset(void) {
         memset(&_ram[0], 0, _ram.size());
     }
+    virtual void save(SaveState &state) {
+        state << _ram;
+    }
+    virtual void load(LoadState &state) {
+        state >> _ram;
+    }
     virtual void write(addr_t addr, byte_t value) {
-        addr -= 0xC000;
+        addr &= 0x1FFF;
         _ram[addr] = value;
     }
     virtual byte_t read(addr_t addr) {
-        return _ram[addr - 0xC000];
+        addr &= 0x1FFF;
+        return _ram[addr];
     }
 private:
     MemoryBus *_bus;
@@ -131,7 +140,10 @@ struct Registers {
     Word _PC;
 };
 
+// Register structure friends
 std::ostream& operator << (std::ostream &os, const Registers& obj);
+SaveState& operator << (SaveState &state, const Registers & obj);
+LoadState& operator >> (LoadState &state, Registers & obj);
 
 /*
  * XXX: This are defined before the class so we can access
@@ -163,6 +175,8 @@ public:
     ~Cpu(void);
     Cpu(const Cpu &cpu) = delete;
 
+    virtual void save(SaveState &state);
+    virtual void load(LoadState &state);
     // XXX: Do we need to do something here?
     virtual void tick(unsigned cycles);
     virtual void reset(void);
@@ -255,7 +269,6 @@ protected:
     /* Store/Load */
     byte_t _fetch(Register reg);
     void _store(Register reg, byte_t value);
-    word_t _fetchw(Register reg);
 
     inline void _write(addr_t addr, byte_t value) {
         _bus->write(addr, value);
@@ -317,7 +330,7 @@ private:
     State _state;
     byte_t _IE;
     byte_t _IF;
-    byte_t _ram[256];
+    bvec _ram;
 
     unsigned _icycles; // Cycles of last instruction(s)
     unsigned _cycles;  // Total number of cycles (XXX: debugging only?)

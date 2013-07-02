@@ -117,6 +117,7 @@ Cpu::Cpu(MemoryBus *bus):
     _bus(bus),
     _debug(false)
 {
+    _ram.resize(0x100);
     _bus->add_device(this);
     _bus->add_port(0xFF80, 9, this);
     _bus->add_port(0xFF0F, this);
@@ -173,7 +174,7 @@ void Cpu::reset(void)
     _state = State::Running;
     _IF = 0x00;
     _IE = 0x00;
-    memset(_ram, 0, sizeof(_ram));
+    memset(&_ram[0], 0, _ram.size());
 }
 
 
@@ -1038,6 +1039,48 @@ void Cpu::dispatch(void)
         std::cout << "Unknown opcode: " << Print(op) << std::endl;
         throw OpcodeException(op);
     }
+}
+
+SaveState &
+DMG::operator << (SaveState &state, const Registers &obj)
+{
+    state << obj._AF << obj._BC << obj._DE << obj._HL << obj._SP << obj._PC;
+    return state;
+}
+
+LoadState &
+DMG::operator >> (LoadState &state, Registers &obj)
+{
+    state >> obj._AF >> obj._BC >> obj._DE >> obj._HL >> obj._SP >> obj._PC;
+    return state;
+}
+
+void
+Cpu::save(SaveState &state)
+{
+    state << _R;
+    state << _ime;
+    state << _state;
+    state << _IE;
+    state << _IF;
+    state << _ram;
+
+    state << _icycles;
+    state << _cycles;
+}
+
+void
+Cpu::load(LoadState &state)
+{
+    state >> _R;
+    state >> _ime;
+    state >> _state;
+    state >> _IE;
+    state >> _IF;
+    state >> _ram;
+
+    state >> _icycles;
+    state >> _cycles;
 }
 
 void Cpu::tick(unsigned unused)

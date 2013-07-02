@@ -25,11 +25,12 @@ typedef char sbyte_t;
 typedef unsigned short addr_t;
 typedef unsigned short word_t;
 typedef std::vector<byte_t> bvec;
+struct Bytes {
+    byte_t l;
+    byte_t h;
+};
 union Word {
-    struct {
-        byte_t l;
-        byte_t h;
-    } b;
+    Bytes b;
     word_t w;
 };
 

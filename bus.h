@@ -26,11 +26,15 @@
 
 #include "types.h"
 
+#include "state.h"
+
 namespace DMG {
 
 class Device {
 public:
     virtual ~Device(void) { };
+    virtual void save(SaveState &state) = 0;
+    virtual void load(LoadState &state) = 0;
     virtual void tick(unsigned cycles) = 0;
     virtual void reset(void) = 0;
     virtual void write(addr_t addr, byte_t value) = 0;
@@ -101,17 +105,31 @@ public:
     }
 
     void step(void) {
-        int avail;
+        int avail = 0;
         while ((avail += _clock.get_ticks()) < 10000) {
             struct timespec t = { .tv_sec = 0, .tv_nsec = 100000000 };
             nanosleep(&t, NULL);
         }
+        avail = std::min(avail, 200000);
         _cycles = 0;
         while (avail > 0) {
             for_each(_devs.begin(), _devs.end(),
                      [&](Device *map){map->tick(_cycles);});
             avail -= _cycles;
         }
+    }
+
+    void save(SaveState &state) {
+        state << _cycles;
+        for_each(_devs.begin(), _devs.end(),
+                 [&](Device *map){ map->save(state); });
+    }
+
+    void load(LoadState &state) {
+        state >> _cycles;
+        for_each(_devs.begin(), _devs.end(),
+                 [&](Device *map){ map->load(state); });
+        _clock.reset();
     }
 
     inline void irq(Interrupt i) {
