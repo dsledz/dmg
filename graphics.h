@@ -145,15 +145,23 @@ public:
 private:
 
     void render(void);
-    inline byte_t &rget(addr_t reg) {
-        return _reg[reg - VideoReg::LCDC];
-    }
 
     MemoryBus *_bus;
 
     bvec _vram;
     bvec _oam;
-    bvec _reg;
+    byte_t _lcdc;
+    byte_t _stat;
+    byte_t _scy;
+    byte_t _scx;
+    byte_t _ly;
+    byte_t _lyc;
+    byte_t _bgp;
+    byte_t _obp0;
+    byte_t _obp1;
+    byte_t _wy;
+    byte_t _wx;
+
     unsigned _fcycles;
 
     unsigned _ticks;

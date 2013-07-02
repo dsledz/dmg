@@ -351,7 +351,6 @@ SDLDisplay::SDLDisplay(MemoryBus *bus): _bus(bus), _fcycles(0),
 {
     _vram.resize(0x2000);
     _oam.resize(0x0100);
-    _reg.resize(0x0010);
 
     _window = surface_ptr(SDL_SetVideoMode(
         292, 479, 32, SDL_HWSURFACE | SDL_DOUBLEBUF));
@@ -384,7 +383,6 @@ SDLDisplay::reset(void)
 {
     memset(&_vram[0], 0, _vram.size());
     memset(&_oam[0], 0, _oam.size());
-    memset(&_reg[0], 0, _reg.size());
     write(VideoReg::LCDC, 0x91);
     write(VideoReg::SCY, 0x00);
     write(VideoReg::SCX, 0x00);
@@ -402,22 +400,30 @@ SDLDisplay::write(addr_t addr, byte_t arg)
 {
     //std::lock_guard<std::mutex> lock(_mutex);
 
-    if (addr >= 0x8000 && addr < 0xA000) {
-        _vram[addr - 0x8000] = arg;
-    } else if (addr >= 0xFF40 && addr <= 0xFF4B) {
-        switch (addr) {
-        case VideoReg::OBP0:
-            convert_palette(obj0_palette, arg, true);
-            break;
-        case VideoReg::OBP1:
-            convert_palette(obj1_palette, arg, true);
-            break;
-        default:
-            break;
+    switch (addr) {
+    case VideoReg::LCDC: _lcdc = arg; break;
+    case VideoReg::STAT: _stat = arg; break;
+    case VideoReg::SCY: _scy = arg; break;
+    case VideoReg::SCX: _scx = arg; break;
+    case VideoReg::LY: _ly = arg; break;
+    case VideoReg::LYC: _lyc = arg; break;
+    case VideoReg::BGP: _bgp = arg; break;
+    case VideoReg::OBP0:
+        _obp0 = arg;
+        convert_palette(obj0_palette, arg, true);
+        break;
+    case VideoReg::OBP1:
+        _obp1 = arg;
+        convert_palette(obj1_palette, arg, true);
+        break;
+    case VideoReg::WY: _wy = arg; break;
+    case VideoReg::WX: _wx = arg; break;
+    default:
+        if (addr >= 0x8000 && addr < 0xA000) {
+            _vram[addr - 0x8000] = arg;
+        } else if (addr >= 0xFE00 && addr <= 0xFEA0) {
+            _oam[addr - 0xFE00] = arg;
         }
-        rget(addr) = arg;
-    } else if (addr >= 0xFE00 && addr <= 0xFEA0) {
-        _oam[addr - 0xFE00] = arg;
     }
 }
 
@@ -426,12 +432,24 @@ SDLDisplay::read(addr_t addr)
 {
     //std::lock_guard<std::mutex> lock(_mutex);
 
-    if (addr >= 0x8000 && addr < 0xA000) {
-        return _vram[addr - 0x8000];
-    } else if (addr >= 0xFF40 && addr <= 0xFF4B) {
-        return _reg[addr - VideoReg::LCDC];
-    } else if (addr >= 0xFE00 && addr <= 0xFEA0) {
-        return _oam[addr - 0xFE00];
+    switch (addr) {
+    case VideoReg::LCDC: return _lcdc;
+    case VideoReg::STAT: return _stat;
+    case VideoReg::SCY: return _scy;
+    case VideoReg::SCX: return _scx;
+    case VideoReg::LY: return _ly;
+    case VideoReg::LYC: return _lyc;
+    case VideoReg::BGP: return _bgp;
+    case VideoReg::OBP0: return _obp0;
+    case VideoReg::OBP1: return _obp1;
+    case VideoReg::WY: return _wy;
+    case VideoReg::WX: return _wx;
+    default:
+        if (addr >= 0x8000 && addr < 0xA000) {
+            return _vram[addr - 0x8000];
+        } else if (addr >= 0xFE00 && addr <= 0xFEA0) {
+            return _oam[addr - 0xFE00];
+        }
     }
     return 0;
 }
@@ -440,9 +458,6 @@ void
 SDLDisplay::tick(unsigned cycles)
 {
     _fcycles += cycles;
-
-    byte_t &_stat = rget(VideoReg::STAT);
-    byte_t &_ly = rget(VideoReg::LY);
 
     switch (_stat & 0x03) {
     case LCDMode::HBlankMode:
@@ -468,8 +483,7 @@ SDLDisplay::tick(unsigned cycles)
             }
             // See if we need to trigger the lcd interrupt.
             if (bit_isset(_stat, STATBits::LYCInterrupt) &&
-                !(bit_isset(_stat, STATBits::Coincidence) ^
-                  (rget(VideoReg::LYC) == _ly)))
+                !(bit_isset(_stat, STATBits::Coincidence) ^ (_lyc == _ly)))
                 _bus->irq(Interrupt::LCDStat);
         }
         break;
@@ -506,50 +520,44 @@ SDLDisplay::render(void)
 {
     //std::lock_guard<std::mutex> lock(_mutex);
 
-    byte_t lcdc = rget(VideoReg::LCDC);
-
-    if (!bit_isset(lcdc, LCDCBits::LCDEnabled))
+    if (!bit_isset(_lcdc, LCDCBits::LCDEnabled))
         return;
 
     surface_ptr screen = create_surface(SCREEN_W, SCREEN_H, false);
 
-    TileMap bg_tiles(rget(VideoReg::BGP));
+    TileMap bg_tiles(_bgp);
     bg_tiles.init(&_vram[VMem::BGTiles], false);
-    TileMap obj_tiles(rget(VideoReg::BGP));
+    TileMap obj_tiles(_bgp);
     obj_tiles.init(&_vram[VMem::ObjTiles], true);
 
     TileMap *tiles;
-    if (bit_isset(lcdc, LCDCBits::BGTileData))
+    if (bit_isset(_lcdc, LCDCBits::BGTileData))
         tiles = &obj_tiles;
     else
         tiles = &bg_tiles;
 
-    if (bit_isset(lcdc, LCDCBits::BGDisplay)) {
-        const byte_t *map = bit_isset(lcdc, LCDCBits::BGTileMap) ?
+    if (bit_isset(_lcdc, LCDCBits::BGDisplay)) {
+        const byte_t *map = bit_isset(_lcdc, LCDCBits::BGTileMap) ?
             &_vram[VMem::TileMap1] : &_vram[VMem::TileMap0];
         surface_ptr bg(create_map(tiles, map));
-        short scx = rget(VideoReg::SCX);
-        short scy = rget(VideoReg::SCY);
-        blit_bg(screen.get(), bg.get(), scx, scy);
+        blit_bg(screen.get(), bg.get(), _scx, _scy);
     }
 
-    if (bit_isset(lcdc, LCDCBits::WindowDisplay)) {
-        const byte_t *map = bit_isset(lcdc, LCDCBits::WindowTileMap) ?
+    if (bit_isset(_lcdc, LCDCBits::WindowDisplay)) {
+        const byte_t *map = bit_isset(_lcdc, LCDCBits::WindowTileMap) ?
             &_vram[VMem::TileMap1] : &_vram[VMem::TileMap0];
         surface_ptr win(create_map(tiles, map));
-        short wx = rget(VideoReg::WX);
-        short wy = rget(VideoReg::WY);
-        blit_window(screen.get(), win.get(), wx, wy);
+        blit_window(screen.get(), win.get(), _wx, _wy);
     }
 
     const byte_t *oam = &_oam[0];
     Sprite sprites[40];
     for (unsigned i = 0; i < 40; i++) {
-        sprites[i].init(i, bit_isset(lcdc, LCDCBits::OBJSize), oam, &_vram[0]);
+        sprites[i].init(i, bit_isset(_lcdc, LCDCBits::OBJSize), oam, &_vram[0]);
         oam += 4;
     }
 
-    if (bit_isset(lcdc, LCDCBits::OBJDisplay))
+    if (bit_isset(_lcdc, LCDCBits::OBJDisplay))
         for (unsigned i = 40; i > 0; i--)
             sprites[i-1].blit(screen.get());
 
