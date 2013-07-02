@@ -132,15 +132,14 @@ Cpu::write(addr_t addr, byte_t value)
 {
     switch (addr) {
     case CtrlReg::IF:
-        // XXX: Handle interrupts
         _IF = value;
         break;
     case CtrlReg::IE:
         _IE = value;
         break;
     default:
-        if (addr >= 0xFF60)
-            _ram[addr & 0xFF] = value;
+        _ram[addr & 0xFF] = value;
+        break;
     }
 }
 
@@ -153,8 +152,7 @@ Cpu::read(addr_t addr)
     case CtrlReg::IE:
         return _IE;
     default:
-        if (addr >= 0xFF60)
-            return _ram[addr & 0xFF];
+        return _ram[addr & 0xFF];
     }
     return 0;
 }
@@ -639,19 +637,6 @@ void Cpu::dump(void)
     }
     // XXX: state
     std::cout << std::endl;
-}
-
-word_t Cpu::_fetchw(Register reg)
-{
-    switch (reg) {
-        case Register::BC: return _rBC;
-        case Register::DE: return _rDE;
-        case Register::HL: return _rHL;
-        case Register::PC: return _rPC;
-        case Register::SP: return _rSP;
-        default: throw CpuException();
-    }
-    throw CpuException();
 }
 
 void Cpu::_addw(word_t &wdest, word_t arg)
